@@ -2,14 +2,37 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
-from torch.nn.parameter import Parameter
 
-__all__ = ["ResNet", "resnet20", "resnet32", "resnet44", "resnet56"]
+
+def act_func(name):
+    if name == "relu":
+        return nn.ReLU()
+    elif name == "mish":
+        return Mish()
+    elif name == "swish":
+        return Swish()
+    else:
+        raise ValueError(f"Invalid activation function specification: {name}")
+
+
+def resnet_model(version, act="relu", num_classes=10):
+    if version == 20:
+        return resnet20(act=act, num_classes=num_classes)
+    elif version == 32:
+        return resnet32(act=act, num_classes=num_classes)
+    elif version == 44:
+        return resnet44(act=act, num_classes=num_classes)
+    elif version == 56:
+        return resnet56(act=act, num_classes=num_classes)
+    elif version == 110:
+        return resnet110(act=act, num_classes=num_classes)
+    elif version == 1202:
+        return resnet1202(act=act, num_classes=num_classes)
+    else:
+        raise ValueError(f"Invalid ResNet version specification: {version}")
 
 
 def _weights_init(m):
-    classname = m.__class__.__name__
-    # print(classname)
     if isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d):
         init.kaiming_normal_(m.weight)
 
@@ -27,6 +50,7 @@ class Mish(nn.Module):
     def __init__(self):
         super(Mish, self).__init__()
 
+    # noinspection PyMethodMayBeStatic
     def forward(self, x):
         return x * torch.tanh(F.softplus(x))
 
@@ -35,6 +59,7 @@ class Swish(nn.Module):
     def __init__(self):
         super(Swish, self).__init__()
 
+    # noinspection PyMethodMayBeStatic
     def forward(self, x):
         return x * torch.sigmoid(x)
 
@@ -44,20 +69,11 @@ class BasicBlock(nn.Module):
 
     def __init__(self, in_planes, planes, stride=1, act="relu", option="A"):
         super(BasicBlock, self).__init__()
-        self.conv1 = nn.Conv2d(
-            in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=False
-        )
+        self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(planes)
-        self.conv2 = nn.Conv2d(
-            planes, planes, kernel_size=3, stride=1, padding=1, bias=False
-        )
+        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn2 = nn.BatchNorm2d(planes)
-        if act == "relu":
-            self.act = nn.ReLU()
-        elif act == "mish":
-            self.act = Mish()
-        else:
-            self.act = Swish()
+        self.act = act_func(act)
 
         self.shortcut = nn.Sequential()
         if stride != 1 or in_planes != planes:
@@ -104,12 +120,7 @@ class ResNet(nn.Module):
         self.layer2 = self._make_layer(block, act, 32, num_blocks[1], stride=2)
         self.layer3 = self._make_layer(block, act, 64, num_blocks[2], stride=2)
         self.linear = nn.Linear(64, num_classes)
-        if act == "relu":
-            self.act = nn.ReLU()
-        elif act == "mish":
-            self.act = Mish()
-        else:
-            self.act = Swish()
+        self.act = act_func(act)
 
         self.apply(_weights_init)
 
@@ -133,17 +144,25 @@ class ResNet(nn.Module):
         return out
 
 
-def resnet20(act="relu"):
-    return ResNet(BasicBlock, act, [3, 3, 3], num_classes=10)
+def resnet20(act="relu", num_classes=10):
+    return ResNet(BasicBlock, act, [3, 3, 3], num_classes=num_classes)
 
 
-def resnet32(act="relu"):
-    return ResNet(BasicBlock, act, [5, 5, 5], num_classes=10)
+def resnet32(act="relu", num_classes=10):
+    return ResNet(BasicBlock, act, [5, 5, 5], num_classes=num_classes)
 
 
-def resnet44(act="relu"):
-    return ResNet(BasicBlock, act, [7, 7, 7], num_classes=10)
+def resnet44(act="relu", num_classes=10):
+    return ResNet(BasicBlock, act, [7, 7, 7], num_classes=num_classes)
 
 
-def resnet56(act="relu"):
-    return ResNet(BasicBlock, act, [9, 9, 9], num_classes=10)
+def resnet56(act="relu", num_classes=10):
+    return ResNet(BasicBlock, act, [9, 9, 9], num_classes=num_classes)
+
+
+def resnet110(act="relu", num_classes=10):
+    return ResNet(BasicBlock, act, [18, 18, 18], num_classes=num_classes)
+
+
+def resnet1202(act="relu", num_classes=10):
+    return ResNet(BasicBlock, act, [200, 200, 200], num_classes=num_classes)

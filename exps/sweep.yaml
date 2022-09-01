@@ -5,10 +5,10 @@ metric:
   goal: minimize
 parameters:
   optimizer:
-    values: ["adam", "sgd", "ranger"]
+    values: ["adam", "sgd"]
   batch_size:
     values: [32, 64, 128, 256]
   act:
-    values: ["relu", "mish", "swish"]
+    values: ["relu", "swish", "mish"]
   version:
     values: [20]

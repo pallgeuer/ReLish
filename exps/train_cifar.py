@@ -1,57 +1,57 @@
-best_prec1 = 0
-evaluate = True
+#!/usr/bin/env python
 
-import math
 import os
-import shutil
+import os.path
 import time
+import argparse
 
-import numpy as np
-import torch
-import torch.backends.cudnn as cudnn
 import torch.nn as nn
-import torch.nn.functional as F
-import torch.nn.init as init
 import torch.nn.parallel
 import torch.optim
 import torch.utils.data
-import torchvision
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 import wandb
-from ranger import Ranger
-from resnet import *
-from torch.autograd import Variable
 
+try:
+    from ranger import Ranger
+except ImportError:
+    Ranger = None
+
+import resnet
+
+config_defaults = dict(
+    version=20,
+    act="relu",
+    batch_size=32,
+    optimizer="adam",
+)
+
+best_prec1 = 0
+evaluate = True
 
 def main():
-    global best_prec1, evaluate
-    wandb.init(project="Mish")
 
-    if wandb.config.version == 20:
-        model = resnet20(act=wandb.config.act)
-    elif wandb.config.version == 32:
-        model = resnet32(act=wandb.config.act)
-    elif wandb.config.version == 44:
-        model = resnet44(act=wandb.config.act)
-    elif wandb.config.version == 56:
-        model = resnet56(act=wandb.config.act)
+    global best_prec1, evaluate
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dataset_root", type=str, default=os.path.expanduser("~/Datasets/CIFAR"), metavar="PATH", help="Path to the dataset root directory (directory containing cifar-* subdirectories)")
+    parser.add_argument("--num_workers", type=int, default=2, metavar="NUM", help="Number of dataset loader workers")
+    args = parser.parse_args()
+
+    wandb.init(project="ReLish", entity="pallgeuer", config=config_defaults)
+
+    model = resnet.resnet_model(wandb.config.version, act=wandb.config.act, num_classes=10)
     wandb.watch(model)
     model = model.cuda()
 
-    print(
-        "Number of model parameters: {}".format(
-            sum([p.data.nelement() for p in model.parameters()])
-        )
-    )
+    print("Number of model parameters: {}".format(sum([p.data.nelement() for p in model.parameters()])))
 
-    normalize = transforms.Normalize(
-        mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-    )
+    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
     train_loader = torch.utils.data.DataLoader(
         datasets.CIFAR10(
-            root="./data",
+            root=args.dataset_root,
             train=True,
             transform=transforms.Compose(
                 [
@@ -61,17 +61,16 @@ def main():
                     normalize,
                 ]
             ),
-            download=True,
         ),
         batch_size=wandb.config.batch_size,
         shuffle=True,
-        num_workers=4,
+        num_workers=args.num_workers,
         pin_memory=True,
     )
 
     val_loader = torch.utils.data.DataLoader(
         datasets.CIFAR10(
-            root="./data",
+            root=args.dataset_root,
             train=False,
             transform=transforms.Compose(
                 [
@@ -82,25 +81,13 @@ def main():
         ),
         batch_size=wandb.config.batch_size,
         shuffle=False,
-        num_workers=4,
+        num_workers=args.num_workers,
         pin_memory=True,
     )
 
-    # define loss function (criterion) and pptimizer
-    criterion = nn.CrossEntropyLoss()
-    criterion = criterion.cuda()
-
-    if wandb.config.optimizer == "sgd":
-        optimizer = torch.optim.SGD(
-            model.parameters(), 0.1, momentum=0.9, weight_decay=5e-4
-        )
-    elif wandb.config.optimizer == "adam":
-        optimizer = torch.optim.Adam(model.parameters())
-    else:
-        optimizer = Ranger(model.parameters())
-    lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(
-        optimizer, milestones=[100, 150], last_epoch=0 - 1
-    )
+    criterion = nn.CrossEntropyLoss().cuda()
+    optimizer = create_optimizer(wandb.config.optimizer, model.parameters())
+    lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[100, 150], last_epoch=-1)
     max_epoch = 200
 
     for epoch in range(0, max_epoch):
@@ -116,7 +103,6 @@ def main():
         prec1 = validate(val_loader, model, criterion, epoch)
 
         # remember best prec@1 and save checkpoint
-        is_best = prec1 > best_prec1
         best_prec1 = max(prec1, best_prec1)
 
         if epoch > 0 and epoch % 20 == 0:
@@ -126,8 +112,7 @@ def main():
                     "state_dict": model.state_dict(),
                     "best_prec1": best_prec1,
                 },
-                is_best,
-                filename=os.path.join("./", "vanilla_checkpoint.th"),
+                filename="train_cifar_checkpoint.pth",
             )
 
         save_checkpoint(
@@ -135,11 +120,21 @@ def main():
                 "state_dict": model.state_dict(),
                 "best_prec1": best_prec1,
             },
-            is_best,
-            filename=os.path.join("./", "vanilla_model.th"),
+            filename="train_cifar_model.pth",
         )
 
     wandb.run.finish()
+
+
+def create_optimizer(name, params):
+    if name == "sgd":
+        return torch.optim.SGD(params, 0.1, momentum=0.9, weight_decay=5e-4)
+    elif name == "adam":
+        return torch.optim.Adam(params)
+    elif name == "ranger" and Ranger is not None:
+        return Ranger(params)  # noqa
+    else:
+        raise ValueError(f"Invalid optimizer specification: {name}")
 
 
 def train(train_loader, model, criterion, optimizer, epoch):
@@ -155,16 +150,16 @@ def train(train_loader, model, criterion, optimizer, epoch):
     model.train()
 
     end = time.time()
-    for i, (input, target) in enumerate(train_loader):
+    for i, (data, target) in enumerate(train_loader):
 
         # measure data loading time
         data_time.update(time.time() - end)
 
-        input = input.cuda()
+        data = data.cuda()
         target = target.cuda()
 
         # compute output
-        output = model(input)
+        output = model(data)
         loss = criterion(output, target)
 
         # compute gradient and do SGD step
@@ -176,8 +171,8 @@ def train(train_loader, model, criterion, optimizer, epoch):
         loss = loss.float()
         # measure accuracy and record loss
         prec1 = accuracy(output.data, target)[0]
-        losses.update(loss.item(), input.size(0))
-        top1.update(prec1.item(), input.size(0))
+        losses.update(loss.item(), data.size(0))
+        top1.update(prec1.item(), data.size(0))
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -213,14 +208,14 @@ def validate(val_loader, model, criterion, epoch):
     model.eval()
 
     end = time.time()
-    for i, (input, target) in enumerate(val_loader):
+    for i, (data, target) in enumerate(val_loader):
 
-        input = input.cuda()
+        data = data.cuda()
         target = target.cuda()
 
         # compute output
         with torch.no_grad():
-            output = model(input)
+            output = model(data)
             loss = criterion(output, target)
 
         output = output.float()
@@ -228,8 +223,8 @@ def validate(val_loader, model, criterion, epoch):
 
         # measure accuracy and record loss
         prec1 = accuracy(output.data, target)[0]
-        losses.update(loss.item(), input.size(0))
-        top1.update(prec1.item(), input.size(0))
+        losses.update(loss.item(), data.size(0))
+        top1.update(prec1.item(), data.size(0))
 
         # measure elapsed time
         batch_time.update(time.time() - end)
@@ -261,6 +256,11 @@ def validate(val_loader, model, criterion, epoch):
 class AverageMeter(object):
     """Computes and stores the average and current value"""
 
+    val: float
+    avg: float
+    sum: float
+    count: int
+
     def __init__(self):
         self.reset()
 
@@ -277,7 +277,7 @@ class AverageMeter(object):
         self.avg = self.sum / self.count
 
 
-def save_checkpoint(state, is_best, filename="checkpoint.pth.tar"):
+def save_checkpoint(state, filename):
     """
     Save the training model
     """
@@ -301,5 +301,4 @@ def accuracy(output, target, topk=(1,)):
 
 
 if __name__ == "__main__":
-
     main()

@@ -1,0 +1,105 @@
+Commands
+========
+
+INSTALL CUDA
+------------
+
+- Install required CUDA version:
+	cd ~/Programs/DeepStack
+	./install-cuda-10.2-cudnn-7.6.5.sh
+
+INSTALL CONDA ENVIRONMENT
+-------------------------
+
+- Configuration:
+	ENV=relish
+	PYTHON=3.9
+	CUDA_VERSION=10.2
+	CUDA_INSTALL_DIR=/usr/local/cuda-$CUDA_VERSION
+	PYTORCH=1.12
+
+- Create a conda environment:
+	conda create -n $ENV python=$PYTHON
+	CONDA_ENV_DIR="$(readlink -e "$(dirname "$CONDA_EXE")/../envs/$ENV")"
+	mkdir -p "$CONDA_ENV_DIR/etc/conda/activate.d"
+	mkdir -p "$CONDA_ENV_DIR/etc/conda/deactivate.d"
+	cat << 'EOM' > "$CONDA_ENV_DIR/etc/conda/activate.d/pythonpath.sh"
+#!/bin/sh
+# The environment name is available under $CONDA_DEFAULT_ENV
+if [ -n "$PYTHONPATH" ]; then
+	export SUPPRESSED_PYTHONPATH="$PYTHONPATH"
+	unset PYTHONPATH
+fi
+# EOF
+EOM
+	cat << 'EOM' > "$CONDA_ENV_DIR/etc/conda/deactivate.d/pythonpath.sh"
+#!/bin/sh
+# The environment name is available under $CONDA_DEFAULT_ENV
+if [ -n "$SUPPRESSED_PYTHONPATH" ]; then
+	export PYTHONPATH="$SUPPRESSED_PYTHONPATH"
+	unset SUPPRESSED_PYTHONPATH
+fi
+# EOF
+EOM
+	cat << EOM > "$CONDA_ENV_DIR/etc/conda/activate.d/env_vars.sh"
+#!/bin/sh
+source '$CUDA_INSTALL_DIR/add_path.sh'
+# EOF
+EOM
+	cat << EOM > "$CONDA_ENV_DIR/etc/conda/deactivate.d/env_vars.sh"
+#!/bin/sh
+source '$CUDA_INSTALL_DIR/remove_path.sh'
+# EOF
+EOM
+	chmod +x "$CONDA_ENV_DIR/etc/conda/activate.d/pythonpath.sh" "$CONDA_ENV_DIR/etc/conda/deactivate.d/pythonpath.sh" "$CONDA_ENV_DIR/etc/conda/activate.d/env_vars.sh" "$CONDA_ENV_DIR/etc/conda/deactivate.d/env_vars.sh"
+
+- Install PyTorch:
+	conda activate $ENV
+	conda install pytorch=$PYTORCH torchvision cudatoolkit=$CUDA_VERSION -c pytorch
+
+- Install OpenMM packages:
+	conda activate $ENV
+	pip install --upgrade openmim
+	mim install mmcv-full
+	mim install mmcls
+	mim install mmdet
+	mim list
+		mmcls      0.23.2     https://github.com/open-mmlab/mmclassification
+		mmcv-full  1.6.1      https://github.com/open-mmlab/mmcv
+		mmdet      2.25.1     https://github.com/open-mmlab/mmdetection
+
+- Install miscellaneous packages:
+	conda activate $ENV
+	pip install ptflops wandb
+	pip install jupyterlab
+
+- Log into wandb.ai:
+	conda activate $ENV
+	wandb login
+
+DOWNLOAD DATASETS
+-----------------
+
+- Configuration for CIFAR:
+	CIFAR_ROOT=~/Datasets/CIFAR
+
+- Download CIFAR10:
+	wget -P "$CIFAR_ROOT" https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz
+	tar -xvf "$CIFAR_ROOT"/cifar-10-python.tar.gz -C "$CIFAR_ROOT" && rm "$CIFAR_ROOT"/cifar-10-python.tar.gz
+
+- Download CIFAR100:
+	wget -P "$CIFAR_ROOT" https://www.cs.toronto.edu/~kriz/cifar-100-python.tar.gz
+	tar -xvf "$CIFAR_ROOT"/cifar-100-python.tar.gz -C "$CIFAR_ROOT" && rm "$CIFAR_ROOT"/cifar-100-python.tar.gz
+	rm -rf "$CIFAR_ROOT"/cifar-100-python/file.txt~
+
+TRAIN CIFAR
+-----------
+
+- Configuration:
+	RELISH_DIR=~/Code/ReLish
+
+- Train single CIFAR configuration:
+	cd "$RELISH_DIR"/exps
+	conda activate relish
+	xdg-open https://wandb.ai/pallgeuer/ReLish
+	./train_cifar.py
