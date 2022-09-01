@@ -96,10 +96,18 @@ TRAIN CIFAR
 -----------
 
 - Configuration:
+	ENV=relish
 	RELISH_DIR=~/Code/ReLish
+	CIFAR_ROOT=~/Datasets/CIFAR
 
-- Train single CIFAR configuration:
-	cd "$RELISH_DIR"/exps
-	conda activate relish
-	xdg-open https://wandb.ai/pallgeuer/ReLish
-	./train_cifar.py
+- Train single classification model:
+	cd "$RELISH_DIR"/benchmark
+	conda activate $ENV
+	./train_cls.py --dataset CIFAR10 --dataset_path "$CIFAR_ROOT"
+
+- Train classification model sweep:
+	cd "$RELISH_DIR"/benchmark
+	conda activate $ENV
+	export WANDB_DIR="$RELISH_DIR"/benchmark/log
+	wandb sweep sweep/grid_cifar10_resnet18.yaml
+	<WANDB AGENT COMMAND FROM ABOVE OUTPUT>

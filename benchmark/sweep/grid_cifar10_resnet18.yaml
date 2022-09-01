@@ -1,0 +1,17 @@
+program: train_cls.py
+project: train_cls_sweep
+method: grid
+metric:
+  goal: minimize
+  name: val_loss
+parameters:
+  dataset:
+    value: CIFAR10
+  dataset_path:
+    value: ~/Datasets/CIFAR
+  model:
+    value: resnet18
+  act_func:
+    values: ['relu', 'swish', 'mish']
+  batch_size:
+    values: [32, 64, 128, 256]
