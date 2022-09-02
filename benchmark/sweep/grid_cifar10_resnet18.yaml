@@ -3,7 +3,7 @@ project: train_cls_sweep
 method: grid
 metric:
   goal: minimize
-  name: val_loss
+  name: valid_top1_max
 parameters:
   dataset:
     value: CIFAR10

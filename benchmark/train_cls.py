@@ -2,10 +2,18 @@
 # Train a model on a classification task
 
 # Imports
-import contextlib
 import os
 import sys
+import timeit
 import argparse
+import contextlib
+import torch
+import torch.nn as nn
+import torch.utils.data
+import torch.backends.cudnn
+import torchvision.models
+import torchvision.datasets
+import torchvision.transforms as transforms
 import wandb
 
 # Main function
@@ -21,13 +29,19 @@ def main():
 	parser.add_argument('--dataset_path', type=str, default=None, metavar='PATH', help='Classification dataset root path')
 	parser.add_argument('--dataset_workers', type=int, default=2, metavar='NUM', help='Number of worker processes to use for dataset loading')
 	parser.add_argument('--model', type=str, default='resnet18', metavar='MODEL', help='Classification model')
+	parser.add_argument('--model_details', action='store_true', help='Whether to show model details')
 	parser.add_argument('--act_func', type=str, default='relu', metavar='NAME', help='Activation function')
 	parser.add_argument('--optimizer', type=str, default='adam', metavar='NAME', help='Optimizer')
+	parser.add_argument('--scheduler', type=str, default='multisteplr', metavar='NAME', help='Learning rate scheduler')
 	parser.add_argument('--loss', type=str, default='nllloss', metavar='NAME', help='Loss function')
-	parser.add_argument('--epochs', type=int, default=50, metavar='NUM', help='Number of epochs to train')
+	parser.add_argument('--epochs', type=int, default=80, metavar='NUM', help='Number of epochs to train')
 	parser.add_argument('--batch_size', type=int, default=32, metavar='SIZE', help='Training batch size')
 	parser.add_argument('--device', type=str, default='cuda', metavar='DEVICE', help='PyTorch device to run on')
+	parser.add_argument('--no_cudnn_bench', dest='cudnn_bench', action='store_false', help='Disable cuDNN benchmark mode to save memory over speed')
 	args = parser.parse_args()
+
+	if args.dataset_path is not None:
+		args.dataset_path = os.path.expanduser(args.dataset_path)
 
 	log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'log')
 	with contextlib.suppress(OSError):
@@ -41,15 +55,16 @@ def main():
 		group=args.wandb_group,
 		job_type=args.wandb_job_type,
 		name=args.wandb_name,
-		config={key: value for key, value in vars(args).items() if not key.startswith('wandb_')},
+		config={key: value for key, value in vars(args).items() if not key.startswith('wandb_') and key not in ('model_details',)},
 		dir=log_dir,
 	):
 
 		print()
 
+		C = wandb.config
 		print("Configuration:")
 		# noinspection PyProtectedMember
-		for key, value in wandb.config._items.items():
+		for key, value in C._items.items():
 			if key == '_wandb':
 				if value:
 					print("  wandb:")
@@ -61,23 +76,249 @@ def main():
 				print(f"  {key}: {value}")
 		print()
 
-		train()
+		if C.cudnn_bench:
+			torch.backends.cudnn.benchmark = True
+
+		train_loader, valid_loader, num_classes = load_dataset(C)
+		model = load_model(C, num_classes, details=args.model_details)
+		output_layer, criterion = load_criterion(C)
+		optimizer = load_optimizer(C, model.parameters())
+		scheduler = load_scheduler(C, optimizer)
+
+		train_model(C, train_loader, valid_loader, model, output_layer, criterion, optimizer, scheduler)
 
 	print()
+
+# Load the dataset
+def load_dataset(C):
+
+	tfrm_normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+
+	if C.dataset in ('CIFAR10', 'CIFAR100'):
+		train_tfrm = transforms.Compose([
+			transforms.RandomHorizontalFlip(),
+			transforms.RandomCrop(32, 4),
+			transforms.ToTensor(),
+			tfrm_normalize,
+		])
+		valid_tfrm = transforms.Compose([
+			transforms.ToTensor(),
+			tfrm_normalize,
+		])
+		dataset_class = getattr(torchvision.datasets, C.dataset)
+		train_dataset = dataset_class(root=C.dataset_path, train=True, transform=train_tfrm)
+		valid_dataset = dataset_class(root=C.dataset_path, train=False, transform=valid_tfrm)
+		num_classes = int(C.dataset[5:])
+
+	else:
+		raise ValueError(f"Invalid dataset specification: {C.dataset}")
+
+	train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=C.batch_size, num_workers=C.dataset_workers, shuffle=True, pin_memory=True)
+	valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=C.batch_size, num_workers=C.dataset_workers, shuffle=False, pin_memory=True)
+
+	return train_loader, valid_loader, num_classes
+
+# Load the model
+def load_model(C, num_classes, details=False):
+
+	model_factory = getattr(torchvision.models, C.model, None)
+	if model_factory is None or not C.model.islower() or C.model.startswith('_') or not callable(model_factory):
+		raise ValueError(f"Invalid model specification: {C.model}")
+
+	is_resnet = C.model in ('resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152', 'resnext50_32x4d', 'resnext101_32x8d', 'resnext101_64x4d', 'wide_resnet50_2', 'wide_resnet101_2')
+
+	kwargs = {}
+	if is_resnet:
+		pass
+	else:
+		raise ValueError(f"Unhandled model specification: {C.model}")
+
+	model = model_factory(num_classes=num_classes, **kwargs)
+
+	change_actions = []
+	act_func_factory = get_act_func_factory(C)
+
+	def change_activation_attr(module, attr_name):
+		old_act_func = getattr(module, attr_name)
+		if old_act_func.__class__ != act_func_factory:
+			setattr(module, attr_name, act_func_factory(inplace=old_act_func.inplace))
+
+	def change_act_func(module):
+		if hasattr(module, 'relu'):
+			change_actions.append((change_activation_attr, module, 'relu'))
+
+	if is_resnet:
+		model.apply(change_act_func)
+	else:
+		raise ValueError(f"Unhandled model specification: {C.model}")
+
+	for func, *args in change_actions:
+		func(*args)
+
+	if details:
+		print(model)
+		print()
+		print(f"Total model parameters: {sum(p.numel() for p in model.parameters())}")
+		print(f"Trainable model parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
+		print()
+
+	wandb.watch(model)
+	model.to(device=C.device)
+
+	return model
+
+# Get the required activation function class
+def get_act_func_factory(C):
+	# Returns a callable that accepts an 'inplace' keyword argument
+	if C.act_func == 'relu':
+		return nn.ReLU
+	elif C.act_func in ('silu', 'swish'):
+		return nn.SiLU
+	elif C.act_func == 'mish':
+		return nn.Mish
+	else:
+		raise ValueError(f"Invalid activation function specification: {C.act_func}")
+
+# Load the criterion
+def load_criterion(C):
+
+	if C.loss == 'nllloss':
+		output_layer = nn.LogSoftmax(dim=1)
+		criterion = nn.NLLLoss(reduction='mean')
+	else:
+		raise ValueError(f"Invalid criterion/loss specification: {C.loss}")
+
+	if output_layer is not None:
+		output_layer.to(device=C.device)
+	criterion.to(device=C.device)
+
+	return output_layer, criterion
+
+# Load the optimizer
+def load_optimizer(C, model_params):
+	if C.optimizer == 'sgd':
+		return torch.optim.SGD(model_params, 0.1, momentum=0.9, weight_decay=5e-4)
+	elif C.optimizer == 'adam':
+		return torch.optim.Adam(model_params)
+	else:
+		raise ValueError(f"Invalid optimizer specification: {C.optimizer}")
+
+# Load the learning rate scheduler
+def load_scheduler(C, optimizer):
+	if C.scheduler == 'multisteplr':
+		return torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[round(0.5 * C.epochs), round(0.75 * C.epochs)], gamma=0.1)
+	else:
+		raise ValueError(f"Invalid learning rate scheduler specification: {C.scheduler}")
 
 # Train the model
-def train():
-	import random
-	num_epochs = wandb.config.epochs
-	val_loss = 0
+def train_model(C, train_loader, valid_loader, model, output_layer, criterion, optimizer, scheduler):
+
+	valid_topk_max = [0] * 5
+	device = torch.device(C.device)
+
 	wandb.log(dict(epoch=0))
-	for epoch in range(1, num_epochs + 1):
-		log = {}
-		print(f"Epoch {epoch}/{num_epochs}")
-		val_loss += (random.random() - 0.5) / 10
-		log.update(epoch=epoch, val_loss=val_loss)
+	epoch_stamp = timeit.default_timer()
+
+	for epoch in range(1, C.epochs + 1):
+
+		print('-' * 80)
+		lr = optimizer.param_groups[0]['lr']
+		print(f"Epoch {epoch}/{C.epochs}, LR {lr:.3g}")
+		log = dict(epoch=epoch, lr=lr)
+
+		model.train()
+
+		num_train_batches = len(train_loader)
+		num_train_samples = 0
+		train_loss = 0
+		train_topk = [0] * 5
+
+		for data, target in train_loader:
+
+			num_in_batch = data.shape[0]
+			data = data.to(device, non_blocking=True)
+			target = target.to(device, non_blocking=True)
+
+			optimizer.zero_grad()
+			output = model(data)
+			assert output.shape[0] == num_in_batch
+			mean_batch_loss = criterion(output if output_layer is None else output_layer(output), target)
+			mean_batch_loss_float = mean_batch_loss.item()
+			mean_batch_loss.backward()
+			optimizer.step()
+
+			num_train_samples += num_in_batch
+			train_loss += mean_batch_loss_float * num_in_batch
+			batch_topk_sum = calc_topk_sum(output, target, topn=5)
+			for k in range(5):
+				train_topk[k] += batch_topk_sum[k]
+
+		train_loss /= num_train_samples
+		for k in range(5):
+			train_topk[k] /= num_train_samples
+
+		log.update(train_loss=train_loss)
+		for k in range(5):
+			log[f'train_top{k + 1}'] = train_topk[k]
+
+		print(f"Trained {num_train_samples} samples in {num_train_batches} batches: Mean loss {train_loss:#.4g}, Top-k ({', '.join(f'{topk:.2%}' for topk in reversed(train_topk))})")
+
+		model.eval()
+
+		num_valid_batches = len(valid_loader)
+		num_valid_samples = 0
+		valid_loss = 0
+		valid_topk = [0] * 5
+
+		with torch.inference_mode():
+			for data, target in valid_loader:
+
+				num_in_batch = data.shape[0]
+				data = data.to(device, non_blocking=True)
+				target = target.to(device, non_blocking=True)
+
+				output = model(data)
+				assert output.shape[0] == num_in_batch
+				mean_batch_loss = criterion(output if output_layer is None else output_layer(output), target)
+				mean_batch_loss_float = mean_batch_loss.item()
+
+				num_valid_samples += num_in_batch
+				valid_loss += mean_batch_loss_float * num_in_batch
+				batch_topk_sum = calc_topk_sum(output, target, topn=5)
+				for k in range(5):
+					valid_topk[k] += batch_topk_sum[k]
+
+		valid_loss /= num_valid_samples
+		for k in range(5):
+			valid_topk[k] /= num_valid_samples
+			valid_topk_max[k] = max(valid_topk_max[k], valid_topk[k])
+
+		log.update(valid_loss=valid_loss)
+		for k in range(5):
+			log[f'valid_top{k + 1}'] = valid_topk[k]
+			log[f'valid_top{k + 1}_max'] = valid_topk_max[k]
+
+		print(f"Validated {num_valid_samples} samples in {num_valid_batches} batches: Mean loss {valid_loss:#.4g}, Top-k ({', '.join(f'{topk:.2%}' for topk in reversed(valid_topk))})")
+
+		scheduler.step()
+
+		end_stamp = timeit.default_timer()
+		epoch_time = end_stamp - epoch_stamp
+		print(f"Completed epoch in {epoch_time:.3f}s")
+		log.update(epoch_time=epoch_time)
+		epoch_stamp = end_stamp
+
 		wandb.log(log)
-	print()
+
+# Calculate summed topk accuracies for a batch
+def calc_topk_sum(output, target, topn=5):
+	# output = BxC tensor of floats where larger score means higher predicted probability of class
+	# target = B tensor of correct class indices
+	num_classes = output.shape[1]
+	top_indices = output.topk(min(topn, num_classes), dim=1, largest=True, sorted=True).indices
+	topk_tensor = torch.unsqueeze(target, dim=1).eq(top_indices).cumsum(dim=1).sum(dim=0, dtype=float)
+	topk_tuple = tuple(topk.item() for topk in topk_tensor)
+	return topk_tuple if num_classes >= topn else topk_tuple + (topk_tuple[-1] * (topn - num_classes))
 
 # Run main function
 if __name__ == "__main__":
