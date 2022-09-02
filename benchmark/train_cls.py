@@ -122,7 +122,7 @@ def load_dataset(C):
 # Load the model
 def load_model(C, num_classes, details=False):
 
-	# TODO: Support the custom small/thin ResNet from train_cifar.py (thinresnet20, ...)
+	# TODO: Support the custom small/thin ResNet from train_cifar.py (resnet18-16, ...) => Try to replace conv modules etc with quarter-size etc?
 
 	model_factory = getattr(torchvision.models, C.model, None)
 	if model_factory is None or not C.model.islower() or C.model.startswith('_') or not callable(model_factory):
