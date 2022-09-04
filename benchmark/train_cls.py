@@ -6,6 +6,7 @@ import os
 import sys
 import timeit
 import argparse
+import fractions
 import functools
 import contextlib
 import torch
@@ -119,41 +120,39 @@ def load_dataset(C):
 # Load the model
 def load_model(C, num_classes, details=False):
 
-	# TODO: Support the custom small/thin ResNet from train_cifar.py (resnet18-16, ...) => Try to replace conv modules etc with quarter-size etc?
+	model_type, _, model_variant = C.model.partition('-')
 
-	model_factory = getattr(torchvision.models, C.model, None)
-	if model_factory is None or not C.model.islower() or C.model.startswith('_') or not callable(model_factory):
-		raise ValueError(f"Invalid model specification: {C.model}")
+	model_factory = getattr(torchvision.models, model_type, None)
+	if model_factory is None or not model_type.islower() or model_type.startswith('_') or not callable(model_factory):
+		raise ValueError(f"Invalid model type: {model_type}")
 
-	is_resnet = C.model in ('resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152', 'resnext50_32x4d', 'resnext101_32x8d', 'resnext101_64x4d', 'wide_resnet50_2', 'wide_resnet101_2')
+	is_resnet = model_type in ('resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152', 'resnext50_32x4d', 'resnext101_32x8d', 'resnext101_64x4d', 'wide_resnet50_2', 'wide_resnet101_2')
 
 	kwargs = {}
 	if is_resnet:
 		pass
 	else:
-		raise ValueError(f"Unhandled model specification: {C.model}")
+		raise ValueError(f"Unhandled model type: {model_type}")
 
 	model = model_factory(num_classes=num_classes, **kwargs)
 
-	change_actions = []
+	actions = []
 	act_func_factory = get_act_func_factory(C)
-
-	def change_activation_attr(module, attr_name):
-		old_act_func = getattr(module, attr_name)
-		if old_act_func.__class__ != act_func_factory:
-			setattr(module, attr_name, act_func_factory(inplace=old_act_func.inplace))
-
-	def change_act_func(module):
-		if hasattr(module, 'relu'):
-			change_actions.append((change_activation_attr, module, 'relu'))
+	act_func_class = act_func_factory().__class__
 
 	if is_resnet:
-		model.apply(change_act_func)
+		if model_variant:
+			try:
+				inplanes = int(model_variant)
+			except ValueError:
+				raise ValueError(f"Invalid model variant: {model_variant}")
+			if inplanes != model.inplanes:
+				model.apply(functools.partial(util.apply_make_thinner, actions=actions, factor=fractions.Fraction(inplanes, model.inplanes), skip_inputs=(model.conv1,), skip_outputs=(model.fc,)))
+		model.apply(functools.partial(util.apply_replace_act_func, actions=actions, act_func_classes=(nn.modules.activation.ReLU,), factory=act_func_factory, klass=act_func_class))
 	else:
-		raise ValueError(f"Unhandled model specification: {C.model}")
+		raise ValueError(f"Unhandled model type: {model_type}")
 
-	for func, *args in change_actions:
-		func(*args)
+	util.execute_apply_actions(actions)
 
 	if details:
 		print(model)
