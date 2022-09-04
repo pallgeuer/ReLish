@@ -16,6 +16,7 @@ import torchvision.models
 import torchvision.datasets
 import torchvision.transforms as transforms
 import wandb
+import util
 
 # Main function
 def main():
@@ -58,7 +59,7 @@ def main():
 		name=args.wandb_name,
 		config={key: value for key, value in vars(args).items() if not key.startswith('wandb_') and key not in ('model_details',)},
 		dir=log_dir,
-	):
+	), util.ExceptionPrinter():
 
 		print()
 
