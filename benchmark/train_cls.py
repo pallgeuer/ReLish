@@ -22,6 +22,8 @@ import util
 def main():
 
 	parser = argparse.ArgumentParser()
+	parser.add_argument('--dry', action='store_true', help='Show what would be done but do not actually run the training')
+	parser.add_argument('--no_wandb', dest='use_wandb', action='store_false', help='Do not use wandb')
 	parser.add_argument('--wandb_project', type=str, default='train_cls', metavar='NAME', help='Wandb project name')
 	parser.add_argument('--wandb_entity', type=str, default=None, metavar='USER_TEAM', help='Wandb entity')
 	parser.add_argument('--wandb_group', type=str, default=None, metavar='GROUP', help='Wandb group')
@@ -51,33 +53,24 @@ def main():
 
 	print()
 
-	with wandb.init(
-		project=args.wandb_project,
-		entity=args.wandb_entity,
-		group=args.wandb_group,
-		job_type=args.wandb_job_type,
-		name=args.wandb_name,
-		config={key: value for key, value in vars(args).items() if not key.startswith('wandb_') and key not in ('model_details',)},
-		dir=log_dir,
-	), util.ExceptionPrinter():
+	with contextlib.ExitStack() as stack:
 
-		print()
+		stack.enter_context(wandb.init(
+			project=args.wandb_project,
+			entity=args.wandb_entity,
+			group=args.wandb_group,
+			job_type=args.wandb_job_type,
+			name=args.wandb_name,
+			config={key: value for key, value in vars(args).items() if not key.startswith('wandb_') and key not in ('dry', 'use_wandb', 'model_details')},
+			dir=log_dir,
+			mode='online' if args.use_wandb else 'disabled',
+		))
+		stack.enter_context(util.ExceptionPrinter())
+		if args.use_wandb:
+			print()
 
 		C = wandb.config
-		print("Configuration:")
-		# noinspection PyProtectedMember
-		for key, value in C._items.items():
-			if key == '_wandb':
-				if value:
-					print("  wandb:")
-					for wkey, wvalue in value.items():
-						print(f"    {wkey}: {wvalue}")
-				else:
-					print("  wandb: -")
-			else:
-				print(f"  {key}: {value}")
-		print()
-
+		util.print_wandb_config(C)
 		if C.cudnn_bench:
 			torch.backends.cudnn.benchmark = True
 
@@ -87,7 +80,10 @@ def main():
 		optimizer = load_optimizer(C, model.parameters())
 		scheduler = load_scheduler(C, optimizer)
 
-		train_model(C, train_loader, valid_loader, model, output_layer, criterion, optimizer, scheduler)
+		if args.dry:
+			print("Dry run => Would have trained model...")
+		else:
+			train_model(C, train_loader, valid_loader, model, output_layer, criterion, optimizer, scheduler)
 
 	print()
 
