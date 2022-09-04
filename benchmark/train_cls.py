@@ -199,7 +199,7 @@ def get_act_func_factory(C):  # TODO: Refactor this into another file along with
 	elif C.act_func == 'logsigmoid':
 		return lambda inplace=False: nn.LogSigmoid()
 	elif C.act_func == 'prelu':
-		return nn.PReLU  # Note: Single learnable parameter is shared between all input channels / Ideally do not use weight decay with this
+		return lambda inplace=False: nn.PReLU()  # Note: Single learnable parameter is shared between all input channels / Ideally do not use weight decay with this
 	elif C.act_func == 'relu':
 		return nn.ReLU
 	elif C.act_func == 'relu6':
