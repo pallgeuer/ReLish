@@ -1,6 +1,6 @@
 program: train_cls.py
 project: cls_cifar10
-method: random
+method: grid
 metric:
   goal: minimize
   name: valid_top1_max
@@ -14,6 +14,6 @@ parameters:
   model:
     values: ['resnet18-16', 'resnet34-16', 'resnext50_32x4d-16', 'resnet50-16', 'resnet101-16', 'resnet18-32']
   epochs:
-    values: [32, 50, 80, 120]
+    values: 80
   batch_size:
-    values: [32, 64, 128, 256]
+    values: 128

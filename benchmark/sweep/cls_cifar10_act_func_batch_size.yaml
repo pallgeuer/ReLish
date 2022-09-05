@@ -1,6 +1,6 @@
 program: train_cls.py
 project: cls_cifar10
-method: random
+method: grid
 metric:
   goal: minimize
   name: valid_top1_max
@@ -12,8 +12,8 @@ parameters:
   act_func:
     values: ['elu', 'hardshrink', 'hardsigmoid', 'hardtanh', 'hardswish', 'leakyrelu-0.01', 'leakyrelu-0.05', 'leakyrelu-0.25', 'logsigmoid', 'prelu', 'relu', 'relu6', 'rrelu', 'selu', 'celu', 'gelu-exact', 'gelu-approx', 'sigmoid', 'silu', 'mish', 'softplus', 'softshrink', 'softsign', 'tanh', 'tanhshrink', 'threshold']
   model:
-    values: ['resnet18-16', 'resnet34-16', 'resnext50_32x4d-16', 'resnet50-16', 'resnet101-16', 'resnet18-32']
+    values: resnet34-16
   epochs:
-    values: [32, 50, 80, 120]
+    values: 80
   batch_size:
     values: [32, 64, 128, 256]
