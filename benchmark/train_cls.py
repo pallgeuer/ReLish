@@ -326,7 +326,9 @@ def load_optimizer(C, model_params):
 
 # Load the learning rate scheduler
 def load_scheduler(C, optimizer):
-	if C.scheduler == 'multisteplr':
+	if C.scheduler == 'fixedlr':
+		return torch.optim.lr_scheduler.StepLR(optimizer, step_size=C.epochs + 1, gamma=1.0)
+	elif C.scheduler == 'multisteplr':
 		return torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[round(0.5 * C.epochs), round(0.75 * C.epochs)], gamma=0.1)
 	else:
 		raise ValueError(f"Invalid learning rate scheduler specification: {C.scheduler}")
