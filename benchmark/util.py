@@ -16,19 +16,52 @@ def execute_apply_actions(actions):
 	for func, *args in actions:
 		func(*args)
 
-# Make a network thinner by a certain factor
-def apply_make_thinner(module, actions, factor: fractions.Fraction, skip_inputs, skip_outputs):
-	for attr_key in dir(module):
-		attr_value = getattr(module, attr_key)
-		attr_value_type = type(attr_value)
-		if attr_value_type == nn.modules.conv.Conv2d:
-			print(f"Found Conv2d: {attr_value}")
-		elif attr_value_type == nn.modules.batchnorm.BatchNorm2d:
-			print(f"Found BatchNorm2d: {attr_value}")
-		elif attr_value_type == nn.modules.linear.Linear:
-			print(f"Found Linear: {attr_value}")
-	# TODO: If module is in iterable skip_inputs (be None-careful) then don't transform the input planes
-	# TODO: If module is in iterable skip_outputs (be None-careful) then don't transform the output planes
+# Scale the channels of a network by a certain fractional factor
+def apply_scale_channels(module, actions, factor: fractions.Fraction, skip_inputs, skip_outputs):
+	# noinspection PyProtectedMember
+	for attr_key in module._modules.keys():
+		submodule = getattr(module, attr_key)
+		submodule_class = type(submodule)
+		if submodule_class == nn.Conv2d:
+			scale_input = submodule not in skip_inputs
+			scale_output = submodule not in skip_outputs
+			if scale_input or scale_output:
+				actions.append((replace_submodule, module, attr_key, submodule_class, (), dict(
+					in_channels=apply_factor(submodule.in_channels, factor) if scale_input else submodule.in_channels,
+					out_channels=apply_factor(submodule.out_channels, factor) if scale_output else submodule.out_channels,
+					kernel_size=submodule.kernel_size,
+					stride=submodule.stride,
+					padding=submodule.padding,
+					dilation=submodule.dilation,
+					groups=submodule.groups,
+					bias=submodule.bias is not None,
+					padding_mode=submodule.padding_mode,
+					device=submodule.weight.device,
+					dtype=submodule.weight.dtype,
+				)))
+		elif submodule_class == nn.BatchNorm2d:
+			if submodule not in skip_inputs:
+				device, dtype = (submodule.weight.device, submodule.weight.dtype) if submodule.weight is not None else (submodule.running_mean.device, submodule.running_mean.dtype) if submodule.running_mean is not None else (None, None)
+				actions.append((replace_submodule, module, attr_key, submodule_class, (), dict(
+					num_features=apply_factor(submodule.num_features, factor),
+					eps=submodule.eps,
+					momentum=submodule.momentum,
+					affine=submodule.affine,
+					track_running_stats=submodule.track_running_stats,
+					device=device,
+					dtype=dtype,
+				)))
+		elif submodule_class == nn.Linear:
+			scale_input = submodule not in skip_inputs
+			scale_output = submodule not in skip_outputs
+			if scale_input or scale_output:
+				actions.append((replace_submodule, module, attr_key, submodule_class, (), dict(
+					in_features=apply_factor(submodule.in_features, factor) if scale_input else submodule.in_features,
+					out_features=apply_factor(submodule.out_features, factor) if scale_output else submodule.out_features,
+					bias=submodule.bias is not None,
+					device=submodule.weight.device,
+					dtype=submodule.weight.dtype,
+				)))
 
 # Replace certain activation functions with another activation function type
 def apply_replace_act_func(module, actions, act_func_classes, factory, klass):
@@ -43,6 +76,13 @@ def apply_replace_act_func(module, actions, act_func_classes, factory, klass):
 # Replace a submodule with another new one
 def replace_submodule(module, attr_key, factory, factory_args, factory_kwargs):
 	setattr(module, attr_key, factory(*factory_args, **factory_kwargs))
+
+# Helper for applying a fractional scale factor to an integer
+def apply_factor(value: int, factor: fractions.Fraction):
+	scaled_value = value * factor
+	if scaled_value.denominator != 1:
+		raise ValueError(f"Scaling {value} by {factor} does not result in an integer output")
+	return scaled_value.numerator
 
 #
 # Wandb util

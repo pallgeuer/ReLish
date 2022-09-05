@@ -143,12 +143,12 @@ def load_model(C, num_classes, details=False):
 	if is_resnet:
 		if model_variant:
 			try:
-				inplanes = int(model_variant)
+				conv1_out_channels = int(model_variant)
 			except ValueError:
 				raise ValueError(f"Invalid model variant: {model_variant}")
-			if inplanes != model.inplanes:
-				model.apply(functools.partial(util.apply_make_thinner, actions=actions, factor=fractions.Fraction(inplanes, model.inplanes), skip_inputs=(model.conv1,), skip_outputs=(model.fc,)))
-		model.apply(functools.partial(util.apply_replace_act_func, actions=actions, act_func_classes=(nn.modules.activation.ReLU,), factory=act_func_factory, klass=act_func_class))
+			if conv1_out_channels != model.conv1.out_channels:
+				model.apply(functools.partial(util.apply_scale_channels, actions=actions, factor=fractions.Fraction(conv1_out_channels, model.conv1.out_channels), skip_inputs=(model.conv1,), skip_outputs=(model.fc,)))
+		model.apply(functools.partial(util.apply_replace_act_func, actions=actions, act_func_classes=(nn.ReLU,), factory=act_func_factory, klass=act_func_class))
 	else:
 		raise ValueError(f"Unhandled model type: {model_type}")
 
