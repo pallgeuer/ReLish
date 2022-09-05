@@ -4,9 +4,11 @@ Commands
 INSTALL CUDA
 ------------
 
-- Install required CUDA version:
+- Install required CUDA version (TODO: Is this required for pre-built conda PyTorch install?):
 	cd ~/Programs/DeepStack
-	./install-cuda-10.2-cudnn-7.6.5.sh
+	./install-cuda-10.2-cudnn-7.6.5.sh  # Only for <=7.5 GPUs
+	./install-cuda-11.3-cudnn-8.2.1.sh
+	./install-cuda-11.6-cudnn-8.4.1.sh
 
 INSTALL CONDA ENVIRONMENT
 -------------------------
@@ -14,7 +16,7 @@ INSTALL CONDA ENVIRONMENT
 - Configuration:
 	ENV=relish
 	PYTHON=3.9
-	CUDA_VERSION=10.2
+	CUDA_VERSION=11.6
 	CUDA_INSTALL_DIR=/usr/local/cuda-$CUDA_VERSION
 	PYTORCH=1.12
 
@@ -55,7 +57,7 @@ EOM
 
 - Install PyTorch:
 	conda activate $ENV
-	conda install pytorch=$PYTORCH torchvision cudatoolkit=$CUDA_VERSION -c pytorch
+	conda install pytorch=$PYTORCH torchvision cudatoolkit=$CUDA_VERSION -c pytorch -c conda-forge
 
 - Install OpenMM packages:
 	conda activate $ENV
