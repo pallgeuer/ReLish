@@ -26,18 +26,9 @@ def apply_scale_channels(module, actions, factor: fractions.Fraction, skip_input
 			scale_input = submodule not in skip_inputs
 			scale_output = submodule not in skip_outputs
 			if scale_input or scale_output:
-				actions.append((replace_submodule, module, attr_key, submodule_class, (), dict(
+				actions.append(replace_conv2d(module, attr_key, submodule, dict(
 					in_channels=apply_factor(submodule.in_channels, factor) if scale_input else submodule.in_channels,
 					out_channels=apply_factor(submodule.out_channels, factor) if scale_output else submodule.out_channels,
-					kernel_size=submodule.kernel_size,
-					stride=submodule.stride,
-					padding=submodule.padding,
-					dilation=submodule.dilation,
-					groups=submodule.groups,
-					bias=submodule.bias is not None,
-					padding_mode=submodule.padding_mode,
-					device=submodule.weight.device,
-					dtype=submodule.weight.dtype,
 				)))
 		elif submodule_class == nn.BatchNorm2d:
 			if submodule not in skip_inputs:
@@ -72,6 +63,27 @@ def apply_replace_act_func(module, actions, act_func_classes, factory, klass):
 				if attr_value.__class__ != klass:
 					actions.append((replace_submodule, module, attr_key, factory, (), dict(inplace=attr_value.inplace)))
 				break
+
+# Replace a nn.Conv2D with a new one
+def replace_conv2d(module, attr_key, submodule, replace_kwargs, pending=True):
+	factory_kwargs = dict(
+		in_channels=submodule.in_channels,
+		out_channels=submodule.out_channels,
+		kernel_size=submodule.kernel_size,
+		stride=submodule.stride,
+		padding=submodule.padding,
+		dilation=submodule.dilation,
+		groups=submodule.groups,
+		bias=submodule.bias is not None,
+		padding_mode=submodule.padding_mode,
+		device=submodule.weight.device,
+		dtype=submodule.weight.dtype,
+	)
+	factory_kwargs.update(replace_kwargs)
+	if pending:
+		return replace_submodule, module, attr_key, type(submodule), (), factory_kwargs
+	else:
+		replace_submodule(module, attr_key, type(submodule), (), factory_kwargs)
 
 # Replace a submodule with another new one
 def replace_submodule(module, attr_key, factory, factory_args, factory_kwargs):

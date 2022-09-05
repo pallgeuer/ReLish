@@ -75,8 +75,8 @@ def main():
 		if C.cudnn_bench:
 			torch.backends.cudnn.benchmark = True
 
-		train_loader, valid_loader, num_classes = load_dataset(C)
-		model = load_model(C, num_classes, details=args.model_details)
+		train_loader, valid_loader, num_classes, in_channels = load_dataset(C)
+		model = load_model(C, num_classes, in_channels, details=args.model_details)
 		output_layer, criterion = load_criterion(C)
 		optimizer = load_optimizer(C, model.parameters())
 		scheduler = load_scheduler(C, optimizer)
@@ -95,6 +95,7 @@ def load_dataset(C):
 
 	if C.dataset in ('MNIST', 'FashionMNIST'):
 		num_classes = 10
+		in_channels = 1
 		if C.dataset == 'MNIST':
 			tfrm = transforms.Compose([
 				transforms.ToTensor(),
@@ -114,6 +115,7 @@ def load_dataset(C):
 
 	elif C.dataset in ('CIFAR10', 'CIFAR100'):
 		num_classes = int(C.dataset[5:])
+		in_channels = 3
 		train_tfrm = transforms.Compose([
 			transforms.RandomCrop(size=32, padding=4),
 			transforms.RandomHorizontalFlip(),
@@ -130,6 +132,7 @@ def load_dataset(C):
 
 	elif C.dataset == 'TinyImageNet':
 		num_classes = 200
+		in_channels = 3
 		train_tfrm = transforms.Compose([
 			transforms.RandomCrop(size=64, padding=8),
 			transforms.RandomHorizontalFlip(),
@@ -156,6 +159,7 @@ def load_dataset(C):
 			folder_path = os.path.join(C.dataset_path, 'ILSVRC2012')
 		else:
 			raise AssertionError
+		in_channels = 3
 		train_tfrm = transforms.Compose([
 			transforms.RandomResizedCrop(size=224),
 			transforms.RandomHorizontalFlip(),
@@ -177,10 +181,10 @@ def load_dataset(C):
 	train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=C.batch_size, num_workers=C.dataset_workers, shuffle=True, pin_memory=True)
 	valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=C.batch_size, num_workers=C.dataset_workers, shuffle=False, pin_memory=True)
 
-	return train_loader, valid_loader, num_classes
+	return train_loader, valid_loader, num_classes, in_channels
 
 # Load the model
-def load_model(C, num_classes, details=False):
+def load_model(C, num_classes, in_channels, details=False):
 
 	model_type, _, model_variant = C.model.partition('-')
 
@@ -203,6 +207,8 @@ def load_model(C, num_classes, details=False):
 	act_func_class = act_func_factory().__class__
 
 	if is_resnet:
+		if in_channels != model.conv1.in_channels:
+			util.replace_conv2d(model, 'conv1', model.conv1, dict(in_channels=in_channels), pending=False)
 		if model_variant:
 			try:
 				conv1_out_channels = int(model_variant)
