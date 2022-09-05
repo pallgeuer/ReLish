@@ -30,7 +30,7 @@ def main():
 	parser.add_argument('--wandb_group', type=str, default=None, metavar='GROUP', help='Wandb group')
 	parser.add_argument('--wandb_job_type', type=str, default=None, metavar='TYPE', help='Wandb job type')
 	parser.add_argument('--wandb_name', type=str, default=None, metavar='NAME', help='Wandb run name')
-	parser.add_argument('--dataset', type=str, choices=('CIFAR10', 'CIFAR100'), default=None, metavar='NAME', help='Classification dataset to train on')
+	parser.add_argument('--dataset', type=str, default=None, metavar='NAME', help='Classification dataset to train on')
 	parser.add_argument('--dataset_path', type=str, default=None, metavar='PATH', help='Classification dataset root path')
 	parser.add_argument('--dataset_workers', type=int, default=2, metavar='NUM', help='Number of worker processes to use for dataset loading')
 	parser.add_argument('--model', type=str, default='resnet18', metavar='MODEL', help='Classification model')
