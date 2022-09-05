@@ -1,0 +1,125 @@
+Classification Datasets
+=======================
+
+- MNIST:
+	- 60,000 training samples
+	- 10,000 test samples
+	- 28x28 mono images (8-bit)
+	- 10 classes
+	- {DATASET_PATH}/MNIST/raw/*
+
+- Fashion MNIST:
+	- 60,000 training samples
+	- 10,000 test samples
+	- 28x28 mono images (8-bit)
+	- 10 classes
+	- {DATASET_PATH}/FashionMNIST/raw/*
+
+- CIFAR10:
+	- 50,000 training samples
+	- 10,000 validation samples
+	- 32x32 RGB images
+	- 10 classes
+	- {DATASET_PATH}/cifar-10-batches-py/*
+
+- CIFAR100:
+	- 50,000 training samples
+	- 10,000 validation samples
+	- 32x32 RGB images
+	- 100 classes
+	- {DATASET_PATH}/cifar-100-python/*
+
+- Imagenette:
+	- 9,469 training samples
+	- 3,925 validation samples
+	- Shorter side 320 RGB images
+	- 10 classes
+	- {DATASET_PATH}/imagenette2-320/{train,val}/n*/*
+
+- Imagewoof:
+	- 9,025 training samples
+	- 3,929 validation samples
+	- Shorter side 320 RGB images
+	- 10 classes
+	- {DATASET_PATH}/imagewoof2-320/{train,val}/n*/*
+
+- Tiny ImageNet:
+	- 100,000 training samples
+	- 10,000 validation samples
+	- 64x64 RGB images
+	- 200 classes
+	- {DATASET_PATH}/tiny-imagenet-200/{train,val}/n*/*
+
+- ImageNet1K:
+	- 1,281,167 training samples
+	- 50,000 validation samples
+	- RGB images
+	- 1000 classes
+	- {DATASET_PATH}/ILSVRC2012/{train,val}/n*/*
+
+Classification Models
+=====================
+
+- ResNet:
+	- resnet18-16 = 703,386 params
+	- resnet18-32 = 2,801,450 params
+	- resnet18-64 = 11,181,642 params = resnet18
+	- resnet34-16 = 1,336,538 params
+	- resnet34-32 = 5,330,346 params
+	- resnet34-64 = 21,289,802 params = resnet34
+	- resnet50-16 = 1,486,106 params
+	- resnet50-32 = 5,902,890 params
+	- resnet50-64 = 23,528,522 params = resnet50
+	- resnet101-16 = 2,682,906 params
+	- resnet101-32 = 10,663,978 params
+	- resnet101-64 = 42,520,650 params = resnet101
+	- resnet152-16 = 3,669,274 params
+	- resnet152-32 = 14,586,410 params
+	- resnet152-64 = 58,164,298 params = resnet152
+	- resnext50_32x4d-16 = 1,455,930 params
+	- resnext50_32x4d-32 = 5,774,634 params
+	- resnext50_32x4d-64 = 23,000,394 params = resnext50_32x4d
+	- resnext101_32x8d-16 = 5,466,330 params
+	- resnext101_32x8d-32 = 21,748,906 params
+	- resnext101_32x8d-64 = 86,762,826 params = resnext101_32x8d
+	- resnext101_64x4d-16 = 5,132,826 params
+	- resnext101_64x4d-32 = 20,414,890 params
+	- resnext101_64x4d-64 = 81,426,762 params = resnext101_64x4d
+	- wide_resnet50_2-16 = 4,196,826 params
+	- wide_resnet50_2-32 = 16,738,218 params
+	- wide_resnet50_2-64 = 66,854,730 params = wide_resnet50_2
+	- wide_resnet101_2-16 = 7,835,098 params
+	- wide_resnet101_2-32 = 31,256,490 params
+	- wide_resnet101_2-64 = 124,858,186 params = wide_resnet101_2
+
+- All ordered:
+	703,386 resnet18-16
+	1,336,538 resnet34-16
+	1,455,930 resnext50_32x4d-16
+	1,486,106 resnet50-16
+	2,682,906 resnet101-16
+	2,801,450 resnet18-32
+	3,669,274 resnet152-16
+	4,196,826 wide_resnet50_2-16
+	5,132,826 resnext101_64x4d-16
+	5,330,346 resnet34-32
+	5,466,330 resnext101_32x8d-16
+	5,774,634 resnext50_32x4d-32
+	5,902,890 resnet50-32
+	7,835,098 wide_resnet101_2-16
+	10,663,978 resnet101-32
+	11,181,642 resnet18-64
+	14,586,410 resnet152-32
+	16,738,218 wide_resnet50_2-32
+	20,414,890 resnext101_64x4d-32
+	21,289,802 resnet34-64
+	21,748,906 resnext101_32x8d-32
+	23,000,394 resnext50_32x4d-64
+	23,528,522 resnet50-64
+	31,256,490 wide_resnet101_2-32
+	42,520,650 resnet101-64
+	58,164,298 resnet152-64
+	66,854,730 wide_resnet50_2-64
+	81,426,762 resnext101_64x4d-64
+	86,762,826 resnext101_32x8d-64
+	124,858,186 wide_resnet101_2-64

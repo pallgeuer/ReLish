@@ -77,37 +77,102 @@ EOM
 	conda activate $ENV
 	wandb login
 
-DOWNLOAD DATASETS
------------------
+CLASSIFICATION DATASETS
+-----------------------
 
-- Configuration for CIFAR:
-	CIFAR_ROOT=~/Datasets/CIFAR
+- Configuration:
+	DATASETS=~/Datasets
+	MNIST_ROOT="$DATASETS"/MNIST
+	FASHION_MNIST_ROOT="$DATASETS"/FashionMNIST
+	CIFAR_ROOT="$DATASETS"/CIFAR
+	IMAGENETTE_ROOT="$DATASETS"/Imagenette
+	IMAGEWOOF_ROOT="$DATASETS"/Imagewoof
+	TINY_IMAGENET_ROOT="$DATASETS"/TinyImageNet
+	IMAGENET1K_ROOT="$DATASETS"/ImageNet1K
 
-- Download CIFAR10:
+- MNIST:
+	mkdir "$MNIST_ROOT"
+	wget -P "$MNIST_ROOT/raw" http://yann.lecun.com/exdb/mnist/{train-images-idx3-ubyte.gz,train-labels-idx1-ubyte.gz,t10k-images-idx3-ubyte.gz,t10k-labels-idx1-ubyte.gz}
+	for gz in "$MNIST_ROOT/raw"/*.gz; do gunzip -k "$gz"; done
+
+- Fashion MNIST:
+	mkdir "$FASHION_MNIST_ROOT"
+	wget -P "$FASHION_MNIST_ROOT/raw" http://fashion-mnist.s3-website.eu-central-1.amazonaws.com/{train-images-idx3-ubyte.gz,train-labels-idx1-ubyte.gz,t10k-images-idx3-ubyte.gz,t10k-labels-idx1-ubyte.gz}
+	for gz in "$FASHION_MNIST_ROOT/raw"/*.gz; do gunzip -k "$gz"; done
+
+- CIFAR10:
 	wget -P "$CIFAR_ROOT" https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz
 	tar -xvf "$CIFAR_ROOT"/cifar-10-python.tar.gz -C "$CIFAR_ROOT" && rm "$CIFAR_ROOT"/cifar-10-python.tar.gz
 
-- Download CIFAR100:
+- CIFAR100:
 	wget -P "$CIFAR_ROOT" https://www.cs.toronto.edu/~kriz/cifar-100-python.tar.gz
 	tar -xvf "$CIFAR_ROOT"/cifar-100-python.tar.gz -C "$CIFAR_ROOT" && rm "$CIFAR_ROOT"/cifar-100-python.tar.gz
 	rm -rf "$CIFAR_ROOT"/cifar-100-python/file.txt~
 
-TRAIN CIFAR
------------
+- Imagenette:
+	wget -P "$IMAGENETTE_ROOT" https://s3.amazonaws.com/fast-ai-imageclas/imagenette2-320.tgz
+	tar -xvf "$IMAGENETTE_ROOT"/imagenette2-320.tgz -C "$IMAGENETTE_ROOT" && rm "$IMAGENETTE_ROOT"/imagenette2-320.tgz
+
+- Imagewoof:
+	wget -P "$IMAGEWOOF_ROOT" https://s3.amazonaws.com/fast-ai-imageclas/imagewoof2-320.tgz
+	tar -xvf "$IMAGEWOOF_ROOT"/imagewoof2-320.tgz -C "$IMAGEWOOF_ROOT" && rm "$IMAGEWOOF_ROOT"/imagewoof2-320.tgz
+
+- Tiny ImageNet:
+	wget -P "$TINY_IMAGENET_ROOT" https://image-net.org/data/tiny-imagenet-200.zip
+	unzip "$TINY_IMAGENET_ROOT"/tiny-imagenet-200.zip -d "$TINY_IMAGENET_ROOT" && rm "$TINY_IMAGENET_ROOT"/tiny-imagenet-200.zip
+	rm -r "$TINY_IMAGENET_ROOT"/tiny-imagenet-200/test
+	for wnid in "$TINY_IMAGENET_ROOT"/tiny-imagenet-200/train/*; do mv "$wnid"/images/* "$wnid/"; done
+	rm -r "$TINY_IMAGENET_ROOT"/tiny-imagenet-200/train/*/images "$TINY_IMAGENET_ROOT"/tiny-imagenet-200/train/*/*.txt
+	VALDIR="$TINY_IMAGENET_ROOT"/tiny-imagenet-200/val
+	cut -f1,2 < "$VALDIR/val_annotations.txt" | while read file wnid; do mkdir -p "$VALDIR/$wnid"; mv "$VALDIR/images/$file" "$VALDIR/$wnid/"; done
+	rm -r "$VALDIR"/{images,val_annotations.txt}
+
+- ImageNet1K:
+	xdg-open https://image-net.org/login.php
+		Log in (you need to sign up with an academic email address and wait to be accepted)
+		Click 'Download' at the top
+		Click on '2012' in the section ILSVRC
+		Download 'Training images (Task 1 & 2)' -> Can alternatively just try the wget below
+		Download 'Validation images (all tasks)' -> Can alternatively just try the wget below
+	mkdir "$IMAGENET1K_ROOT"
+	wget -P "$IMAGENET1K_ROOT/ILSVRC2012" https://image-net.org/data/ILSVRC/2012/ILSVRC2012_img_val.tar https://image-net.org/data/ILSVRC/2012/ILSVRC2012_img_train.tar
+	mkdir "$IMAGENET1K_ROOT/ILSVRC2012/val" && tar -xvf "$IMAGENET1K_ROOT"/ILSVRC2012/ILSVRC2012_img_val.tar -C "$IMAGENET1K_ROOT/ILSVRC2012/val" && rm "$IMAGENET1K_ROOT"/ILSVRC2012/ILSVRC2012_img_val.tar
+	(cd "$IMAGENET1K_ROOT/ILSVRC2012/val"; wget -qO- https://raw.githubusercontent.com/soumith/imagenetloader.torch/master/valprep.sh | bash; )
+	find "$IMAGENET1K_ROOT/ILSVRC2012/val" -name "*.JPEG" | wc -l  # Should be 50000
+	TODO: Test the following commands
+	mkdir "$IMAGENET1K_ROOT/ILSVRC2012/train" && tar -xvf "$IMAGENET1K_ROOT"/ILSVRC2012/ILSVRC2012_img_train.tar -C "$IMAGENET1K_ROOT/ILSVRC2012/train" && rm "$IMAGENET1K_ROOT"/ILSVRC2012/ILSVRC2012_img_train.tar
+	find "$IMAGENET1K_ROOT/ILSVRC2012/train" -name "*.JPEG" | wc -l  # Should be 1281167
+
+TRAIN CLASSIFICATION MODEL
+--------------------------
 
 - Configuration:
 	ENV=relish
 	RELISH_DIR=~/Code/ReLish
-	CIFAR_ROOT=~/Datasets/CIFAR
+	DATASETS=~/Datasets
+	MNIST_ROOT="$DATASETS"/MNIST
+	FASHION_MNIST_ROOT="$DATASETS"/FashionMNIST
+	CIFAR_ROOT="$DATASETS"/CIFAR
+	IMAGENETTE_ROOT="$DATASETS"/Imagenette
+	IMAGEWOOF_ROOT="$DATASETS"/Imagewoof
+	TINY_IMAGENET_ROOT="$DATASETS"/TinyImageNet
+	IMAGENET1K_ROOT="$DATASETS"/ImageNet1K
 
 - Train single classification model:
 	cd "$RELISH_DIR"/benchmark
 	conda activate $ENV
+	./train_cls.py --dataset MNIST --dataset_path "$DATASETS"
+	./train_cls.py --dataset FashionMNIST --dataset_path "$DATASETS"
 	./train_cls.py --dataset CIFAR10 --dataset_path "$CIFAR_ROOT"
+	./train_cls.py --dataset CIFAR100 --dataset_path "$CIFAR_ROOT"
+	./train_cls.py --dataset Imagenette --dataset_path "$IMAGENETTE_ROOT"
+	./train_cls.py --dataset Imagewoof --dataset_path "$IMAGEWOOF_ROOT"
+	./train_cls.py --dataset TinyImageNet --dataset_path "$TINY_IMAGENET_ROOT"
+	./train_cls.py --dataset ImageNet1K --dataset_path "$IMAGENET1K_ROOT"
 
 - Train classification model sweep:
 	cd "$RELISH_DIR"/benchmark
 	conda activate $ENV
 	export WANDB_DIR="$RELISH_DIR"/benchmark/log
-	wandb sweep sweep/grid_cifar10_resnet18.yaml
+	wandb sweep sweep/cls_SWEEPNAME.yaml
 	<WANDB AGENT COMMAND FROM ABOVE OUTPUT>

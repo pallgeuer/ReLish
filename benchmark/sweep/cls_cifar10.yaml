@@ -1,6 +1,6 @@
 program: train_cls.py
 project: train_cls_sweep
-method: grid
+method: random
 metric:
   goal: minimize
   name: valid_top1_max
@@ -10,7 +10,7 @@ parameters:
   dataset_path:
     value: ~/Datasets/CIFAR
   model:
-    value: resnet18
+    values: ['resnet18-16', 'resnet34-16', 'resnext50_32x4d-16', 'resnet50-16', 'resnet101-16', 'resnet18-32']
   act_func:
     values: ['elu', 'hardshrink', 'hardsigmoid', 'hardtanh', 'hardswish', 'leakyrelu-0.01', 'leakyrelu-0.05', 'leakyrelu-0.25', 'logsigmoid', 'prelu', 'relu', 'relu6', 'rrelu', 'selu', 'celu', 'gelu-exact', 'gelu-approx', 'sigmoid', 'silu', 'mish', 'softplus', 'softshrink', 'softsign', 'tanh', 'tanhshrink', 'threshold']
   epochs:

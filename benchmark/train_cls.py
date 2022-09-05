@@ -91,23 +91,85 @@ def main():
 # Load the dataset
 def load_dataset(C):
 
-	tfrm_normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+	tfrm_normalize_rgb = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
-	if C.dataset in ('CIFAR10', 'CIFAR100'):
+	if C.dataset in ('MNIST', 'FashionMNIST'):
+		num_classes = 10
+		if C.dataset == 'MNIST':
+			tfrm = transforms.Compose([
+				transforms.ToTensor(),
+				transforms.Normalize(mean=(0.1307,), std=(0.3081,)),
+			])
+		elif C.dataset == 'FashionMNIST':
+			tfrm = transforms.Compose([
+				transforms.RandomHorizontalFlip(),
+				transforms.ToTensor(),
+				transforms.Normalize(mean=(0.2860,), std=(0.3530,)),
+			])
+		else:
+			raise AssertionError
+		dataset_class = getattr(torchvision.datasets, C.dataset)
+		train_dataset = dataset_class(root=C.dataset_path, train=True, transform=tfrm)
+		valid_dataset = dataset_class(root=C.dataset_path, train=False, transform=tfrm)
+
+	elif C.dataset in ('CIFAR10', 'CIFAR100'):
+		num_classes = int(C.dataset[5:])
 		train_tfrm = transforms.Compose([
+			transforms.RandomCrop(size=32, padding=4),
 			transforms.RandomHorizontalFlip(),
-			transforms.RandomCrop(32, 4),
 			transforms.ToTensor(),
-			tfrm_normalize,
+			tfrm_normalize_rgb,
 		])
 		valid_tfrm = transforms.Compose([
 			transforms.ToTensor(),
-			tfrm_normalize,
+			tfrm_normalize_rgb,
 		])
 		dataset_class = getattr(torchvision.datasets, C.dataset)
 		train_dataset = dataset_class(root=C.dataset_path, train=True, transform=train_tfrm)
 		valid_dataset = dataset_class(root=C.dataset_path, train=False, transform=valid_tfrm)
-		num_classes = int(C.dataset[5:])
+
+	elif C.dataset == 'TinyImageNet':
+		num_classes = 200
+		train_tfrm = transforms.Compose([
+			transforms.RandomCrop(size=64, padding=8),
+			transforms.RandomHorizontalFlip(),
+			transforms.ToTensor(),
+			tfrm_normalize_rgb,
+		])
+		valid_tfrm = transforms.Compose([
+			transforms.ToTensor(),
+			tfrm_normalize_rgb,
+		])
+		folder_path = os.path.join(C.dataset_path, 'tiny-imagenet-200')
+		train_dataset = torchvision.datasets.ImageFolder(root=os.path.join(folder_path, 'train'), transform=train_tfrm)
+		valid_dataset = torchvision.datasets.ImageFolder(root=os.path.join(folder_path, 'val'), transform=valid_tfrm)
+
+	elif C.dataset in ('Imagenette', 'Imagewoof', 'ImageNet1K'):
+		if C.dataset == 'Imagenette':
+			num_classes = 10
+			folder_path = os.path.join(C.dataset_path, 'imagenette2-320')
+		elif C.dataset == 'Imagewoof':
+			num_classes = 10
+			folder_path = os.path.join(C.dataset_path, 'imagewoof2-320')
+		elif C.dataset == 'ImageNet1K':
+			num_classes = 1000
+			folder_path = os.path.join(C.dataset_path, 'ILSVRC2012')
+		else:
+			raise AssertionError
+		train_tfrm = transforms.Compose([
+			transforms.RandomResizedCrop(size=224),
+			transforms.RandomHorizontalFlip(),
+			transforms.ToTensor(),
+			tfrm_normalize_rgb,
+		])
+		valid_tfrm = transforms.Compose([
+			transforms.Resize(size=256),
+			transforms.CenterCrop(size=224),
+			transforms.ToTensor(),
+			tfrm_normalize_rgb,
+		])
+		train_dataset = torchvision.datasets.ImageFolder(root=os.path.join(folder_path, 'train'), transform=train_tfrm)
+		valid_dataset = torchvision.datasets.ImageFolder(root=os.path.join(folder_path, 'val'), transform=valid_tfrm)
 
 	else:
 		raise ValueError(f"Invalid dataset specification: {C.dataset}")
