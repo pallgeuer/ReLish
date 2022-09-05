@@ -102,24 +102,24 @@ CLASSIFICATION DATASETS
 
 - CIFAR10:
 	wget -P "$CIFAR_ROOT" https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz
-	tar -xvf "$CIFAR_ROOT"/cifar-10-python.tar.gz -C "$CIFAR_ROOT" && rm "$CIFAR_ROOT"/cifar-10-python.tar.gz
+	tar -xf "$CIFAR_ROOT"/cifar-10-python.tar.gz -C "$CIFAR_ROOT" && rm "$CIFAR_ROOT"/cifar-10-python.tar.gz
 
 - CIFAR100:
 	wget -P "$CIFAR_ROOT" https://www.cs.toronto.edu/~kriz/cifar-100-python.tar.gz
-	tar -xvf "$CIFAR_ROOT"/cifar-100-python.tar.gz -C "$CIFAR_ROOT" && rm "$CIFAR_ROOT"/cifar-100-python.tar.gz
+	tar -xf "$CIFAR_ROOT"/cifar-100-python.tar.gz -C "$CIFAR_ROOT" && rm "$CIFAR_ROOT"/cifar-100-python.tar.gz
 	rm -rf "$CIFAR_ROOT"/cifar-100-python/file.txt~
 
 - Imagenette:
 	wget -P "$IMAGENETTE_ROOT" https://s3.amazonaws.com/fast-ai-imageclas/imagenette2-320.tgz
-	tar -xvf "$IMAGENETTE_ROOT"/imagenette2-320.tgz -C "$IMAGENETTE_ROOT" && rm "$IMAGENETTE_ROOT"/imagenette2-320.tgz
+	tar -xf "$IMAGENETTE_ROOT"/imagenette2-320.tgz -C "$IMAGENETTE_ROOT" && rm "$IMAGENETTE_ROOT"/imagenette2-320.tgz
 
 - Imagewoof:
 	wget -P "$IMAGEWOOF_ROOT" https://s3.amazonaws.com/fast-ai-imageclas/imagewoof2-320.tgz
-	tar -xvf "$IMAGEWOOF_ROOT"/imagewoof2-320.tgz -C "$IMAGEWOOF_ROOT" && rm "$IMAGEWOOF_ROOT"/imagewoof2-320.tgz
+	tar -xf "$IMAGEWOOF_ROOT"/imagewoof2-320.tgz -C "$IMAGEWOOF_ROOT" && rm "$IMAGEWOOF_ROOT"/imagewoof2-320.tgz
 
 - Tiny ImageNet:
 	wget -P "$TINY_IMAGENET_ROOT" https://image-net.org/data/tiny-imagenet-200.zip
-	unzip "$TINY_IMAGENET_ROOT"/tiny-imagenet-200.zip -d "$TINY_IMAGENET_ROOT" && rm "$TINY_IMAGENET_ROOT"/tiny-imagenet-200.zip
+	unzip -q "$TINY_IMAGENET_ROOT"/tiny-imagenet-200.zip -d "$TINY_IMAGENET_ROOT" && rm "$TINY_IMAGENET_ROOT"/tiny-imagenet-200.zip
 	rm -r "$TINY_IMAGENET_ROOT"/tiny-imagenet-200/test
 	for wnid in "$TINY_IMAGENET_ROOT"/tiny-imagenet-200/train/*; do mv "$wnid"/images/* "$wnid/"; done
 	rm -r "$TINY_IMAGENET_ROOT"/tiny-imagenet-200/train/*/images "$TINY_IMAGENET_ROOT"/tiny-imagenet-200/train/*/*.txt
@@ -136,11 +136,11 @@ CLASSIFICATION DATASETS
 		Download 'Validation images (all tasks)' -> Can alternatively just try the wget below
 	mkdir "$IMAGENET1K_ROOT"
 	wget -P "$IMAGENET1K_ROOT/ILSVRC2012" https://image-net.org/data/ILSVRC/2012/ILSVRC2012_img_val.tar https://image-net.org/data/ILSVRC/2012/ILSVRC2012_img_train.tar
-	mkdir "$IMAGENET1K_ROOT/ILSVRC2012/val" && tar -xvf "$IMAGENET1K_ROOT"/ILSVRC2012/ILSVRC2012_img_val.tar -C "$IMAGENET1K_ROOT/ILSVRC2012/val" && rm "$IMAGENET1K_ROOT"/ILSVRC2012/ILSVRC2012_img_val.tar
+	mkdir "$IMAGENET1K_ROOT/ILSVRC2012/val" && tar -xf "$IMAGENET1K_ROOT"/ILSVRC2012/ILSVRC2012_img_val.tar -C "$IMAGENET1K_ROOT/ILSVRC2012/val" && rm "$IMAGENET1K_ROOT"/ILSVRC2012/ILSVRC2012_img_val.tar
 	(cd "$IMAGENET1K_ROOT/ILSVRC2012/val"; wget -qO- https://raw.githubusercontent.com/soumith/imagenetloader.torch/master/valprep.sh | bash; )
 	find "$IMAGENET1K_ROOT/ILSVRC2012/val" -name "*.JPEG" | wc -l  # Should be 50000
-	TODO: Test the following commands
-	mkdir "$IMAGENET1K_ROOT/ILSVRC2012/train" && tar -xvf "$IMAGENET1K_ROOT"/ILSVRC2012/ILSVRC2012_img_train.tar -C "$IMAGENET1K_ROOT/ILSVRC2012/train" && rm "$IMAGENET1K_ROOT"/ILSVRC2012/ILSVRC2012_img_train.tar
+	mkdir "$IMAGENET1K_ROOT/ILSVRC2012/train" && tar -xf "$IMAGENET1K_ROOT"/ILSVRC2012/ILSVRC2012_img_train.tar -C "$IMAGENET1K_ROOT/ILSVRC2012/train" && rm "$IMAGENET1K_ROOT"/ILSVRC2012/ILSVRC2012_img_train.tar
+	for class_tar in "$IMAGENET1K_ROOT/ILSVRC2012/train"/*.tar; do class_dir="${class_tar%.tar}"; mkdir "$class_dir" && tar -xf "$class_tar" -C "$class_dir" && rm "$class_tar"; done
 	find "$IMAGENET1K_ROOT/ILSVRC2012/train" -name "*.JPEG" | wc -l  # Should be 1281167
 
 TRAIN CLASSIFICATION MODEL
