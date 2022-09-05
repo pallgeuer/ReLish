@@ -275,9 +275,13 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 	valid_topk_max = [0] * 5
 	device = torch.device(C.device)
 
-	wandb.log(dict(epoch=0))
-	epoch_stamp = timeit.default_timer()
+	wandb.log(dict(
+		epoch=0,
+		params=sum(p.numel() for p in model.parameters()),
+		params_grad=sum(p.numel() for p in model.parameters() if p.requires_grad),
+	))
 
+	epoch_stamp = timeit.default_timer()
 	for epoch in range(1, C.epochs + 1):
 
 		print('-' * 80)
