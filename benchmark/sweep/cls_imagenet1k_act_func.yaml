@@ -1,0 +1,17 @@
+program: train_cls.py
+project: cls_imagenet1k
+method: grid
+metric:
+  goal: minimize
+  name: valid_top1_max
+parameters:
+  dataset:
+    value: ImageNet1K
+  act_func:
+    values: ['elu', 'hardshrink', 'hardsigmoid', 'hardtanh', 'hardswish', 'leakyrelu-0.01', 'leakyrelu-0.05', 'leakyrelu-0.25', 'logsigmoid', 'prelu', 'relu', 'relu6', 'rrelu', 'selu', 'celu', 'gelu-exact', 'gelu-approx', 'sigmoid', 'silu', 'mish', 'softplus', 'softshrink', 'softsign', 'tanh', 'tanhshrink', 'threshold']
+  model:
+    value: resnet101
+  epochs:
+    value: 80
+  batch_size:
+    value: 128

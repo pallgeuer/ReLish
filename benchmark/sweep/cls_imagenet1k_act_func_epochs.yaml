@@ -1,0 +1,17 @@
+program: train_cls.py
+project: cls_imagenet1k
+method: grid
+metric:
+  goal: minimize
+  name: valid_top1_max
+parameters:
+  dataset:
+    value: ImageNet1K
+  act_func:
+    values: ['relu', 'silu', 'mish']
+  model:
+    value: resnet101
+  epochs:
+    values: [32, 50, 80, 120]
+  batch_size:
+    value: 128
