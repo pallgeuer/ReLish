@@ -12,7 +12,7 @@ parameters:
   act_func:
     values: ['relu', 'silu', 'mish']
   model:
-    values: ['fcnet', 'resnet18-16', 'resnet34-16', 'resnet18-32']
+    values: ['fcnet-5', 'fcnet', 'fcnet-13', 'resnet18-16', 'resnet34-16', 'resnet18-32']
   epochs:
     value: 50
   batch_size:

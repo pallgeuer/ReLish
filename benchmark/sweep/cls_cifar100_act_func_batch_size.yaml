@@ -1,19 +1,19 @@
 program: train_cls.py
-project: cls_cifar10
+project: cls_cifar100
 method: grid
 metric:
   goal: minimize
   name: valid_top1_max
 parameters:
   dataset:
-    value: CIFAR10
+    value: CIFAR100
   dataset_path:
     value: ~/Datasets/CIFAR
   act_func:
     values: ['relu', 'silu', 'mish']
   model:
-    values: ['fcnet-5', 'fcnet', 'fcnet-13', 'resnet18-16', 'resnet34-16', 'resnext50_32x4d-16', 'resnet50-16', 'resnet101-16', 'resnet18-32']
+    value: resnet34-32
   epochs:
-    value: 80
+    value: 120
   batch_size:
-    value: 128
+    values: [32, 64, 128, 256]

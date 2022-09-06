@@ -12,7 +12,7 @@ parameters:
   act_func:
     values: ['elu', 'hardshrink', 'hardsigmoid', 'hardtanh', 'hardswish', 'leakyrelu-0.01', 'leakyrelu-0.05', 'leakyrelu-0.25', 'logsigmoid', 'prelu', 'relu', 'relu6', 'rrelu', 'selu', 'celu', 'gelu-exact', 'gelu-approx', 'sigmoid', 'silu', 'mish', 'softplus', 'softshrink', 'softsign', 'tanh', 'tanhshrink', 'threshold']
   model:
-    values: ['fcnet', 'resnet18-16', 'resnet34-16', 'resnet18-32']
+    values: ['fcnet-5', 'fcnet', 'fcnet-13', 'resnet18-16', 'resnet34-16', 'resnet18-32']
   epochs:
     values: [20, 32, 50, 80]
   batch_size:

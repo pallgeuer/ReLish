@@ -1,19 +1,19 @@
 program: train_cls.py
-project: cls_cifar10
+project: cls_cifar100
 method: random
 metric:
   goal: minimize
   name: valid_top1_max
 parameters:
   dataset:
-    value: CIFAR10
+    value: CIFAR100
   dataset_path:
     value: ~/Datasets/CIFAR
   act_func:
     values: ['elu', 'hardshrink', 'hardsigmoid', 'hardtanh', 'hardswish', 'leakyrelu-0.01', 'leakyrelu-0.05', 'leakyrelu-0.25', 'logsigmoid', 'prelu', 'relu', 'relu6', 'rrelu', 'selu', 'celu', 'gelu-exact', 'gelu-approx', 'sigmoid', 'silu', 'mish', 'softplus', 'softshrink', 'softsign', 'tanh', 'tanhshrink', 'threshold']
   model:
-    values: ['fcnet-5', 'fcnet', 'fcnet-13', 'resnet18-16', 'resnet34-16', 'resnext50_32x4d-16', 'resnet50-16', 'resnet101-16', 'resnet18-32']
+    values: ['resnet34-16', 'resnext50_32x4d-16', 'resnet50-16', 'resnet101-16', 'resnet18-32', 'wide_resnet50_2-16', 'resnext101_64x4d-16', 'resnet34-32', 'resnext50_32x4d-32', 'resnet50-32', 'wide_resnet101_2-16', 'resnet101-32', 'resnet18']
   epochs:
-    values: [32, 50, 80, 120]
+    values: [50, 80, 120, 180]
   batch_size:
     values: [32, 64, 128, 256]
