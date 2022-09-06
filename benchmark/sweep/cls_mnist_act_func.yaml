@@ -1,0 +1,19 @@
+program: train_cls.py
+project: cls_mnist
+method: grid
+metric:
+  goal: minimize
+  name: valid_top1_max
+parameters:
+  dataset:
+    values: ['MNIST', 'FashionMNIST']
+  dataset_path:
+    value: ~/Datasets
+  act_func:
+    values: ['elu', 'hardshrink', 'hardsigmoid', 'hardtanh', 'hardswish', 'leakyrelu-0.01', 'leakyrelu-0.05', 'leakyrelu-0.25', 'logsigmoid', 'prelu', 'relu', 'relu6', 'rrelu', 'selu', 'celu', 'gelu-exact', 'gelu-approx', 'sigmoid', 'silu', 'mish', 'softplus', 'softshrink', 'softsign', 'tanh', 'tanhshrink', 'threshold']
+  model:
+    value: resnet18-16
+  epochs:
+    value: 50
+  batch_size:
+    value: 128

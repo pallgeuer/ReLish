@@ -10,10 +10,10 @@ parameters:
   dataset_path:
     value: ~/Datasets/CIFAR
   act_func:
-    values: ['elu', 'hardshrink', 'hardsigmoid', 'hardtanh', 'hardswish', 'leakyrelu-0.01', 'leakyrelu-0.05', 'leakyrelu-0.25', 'logsigmoid', 'prelu', 'relu', 'relu6', 'rrelu', 'selu', 'celu', 'gelu-exact', 'gelu-approx', 'sigmoid', 'silu', 'mish', 'softplus', 'softshrink', 'softsign', 'tanh', 'tanhshrink', 'threshold']
+    values: ['relu', 'silu', 'mish']
   model:
-    values: resnet34-16
+    value: resnet34-16
   epochs:
-    values: 80
+    value: 80
   batch_size:
     values: [32, 64, 128, 256]

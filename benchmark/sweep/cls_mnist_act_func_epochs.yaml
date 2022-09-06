@@ -1,19 +1,19 @@
 program: train_cls.py
-project: cls_cifar10
+project: cls_mnist
 method: grid
 metric:
   goal: minimize
   name: valid_top1_max
 parameters:
   dataset:
-    value: CIFAR10
+    values: ['MNIST', 'FashionMNIST']
   dataset_path:
-    value: ~/Datasets/CIFAR
+    value: ~/Datasets
   act_func:
     values: ['relu', 'silu', 'mish']
   model:
-    values: ['resnet18-16', 'resnet34-16', 'resnext50_32x4d-16', 'resnet50-16', 'resnet101-16', 'resnet18-32']
+    value: resnet18-16
   epochs:
-    value: 80
+    values: [20, 32, 50, 80]
   batch_size:
     value: 128
