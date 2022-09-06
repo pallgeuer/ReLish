@@ -104,3 +104,8 @@ Note: Number of parameters is evaluated for CIFAR10
 	 49,462,378 = convnext_small
 	 87,576,714 = convnext_base
 	196,245,706 = convnext_large
+
+- EfficientNet:
+	 20,190,298 = efficientnet_v2_s
+	 52,871,166 = efficientnet_v2_m
+	117,247,082 = efficientnet_v2_l

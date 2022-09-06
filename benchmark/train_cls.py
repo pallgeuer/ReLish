@@ -202,6 +202,7 @@ def load_model(C, num_classes, in_shape, details=False):
 	is_fcnet = model_type == 'fcnet'
 	is_resnet = model_type in ('resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152', 'resnext50_32x4d', 'resnext101_32x8d', 'resnext101_64x4d', 'wide_resnet50_2', 'wide_resnet101_2')
 	is_convnext = model_type in ('convnext_tiny', 'convnext_small', 'convnext_base', 'convnext_large')
+	is_efficientnet = model_type in ('efficientnet_v2_s', 'efficientnet_v2_m', 'efficientnet_v2_l')
 
 	act_func_factory = get_act_func_factory(C)
 	act_func_class = act_func_factory().__class__
@@ -209,7 +210,7 @@ def load_model(C, num_classes, in_shape, details=False):
 
 	if is_fcnet:
 		model = models.FCNet(in_features=math.prod(in_shape), num_classes=num_classes, num_layers=model_variant_int(default=8), act_func_factory=act_func_factory)
-	elif is_resnet or is_convnext:
+	elif is_resnet or is_convnext or is_efficientnet:
 		model_factory = getattr(torchvision.models, model_type, None)
 		if model_factory is None or not model_type.islower() or model_type.startswith('_') or not callable(model_factory):
 			raise ValueError(f"Invalid torchvision model type: {model_type}")
@@ -226,9 +227,9 @@ def load_model(C, num_classes, in_shape, details=False):
 		if conv1_out_channels != model.conv1.out_channels:
 			model.apply(functools.partial(models.pending_scale_channels, actions=actions, factor=fractions.Fraction(conv1_out_channels, model.conv1.out_channels), skip_inputs=(model.conv1,), skip_outputs=(model.fc,)))
 		model.apply(functools.partial(models.pending_replace_act_func, actions=actions, act_func_classes=(nn.ReLU,), factory=act_func_factory, klass=act_func_class))
-	elif is_convnext:
+	elif is_convnext or is_efficientnet:  # Note: EfficientNet keeps its sigmoid activation scalers
 		models.replace_conv2d_in_channels(model.features[0], '0', in_channels=in_channels, actions=actions)
-		model.apply(functools.partial(models.pending_replace_act_func, actions=actions, act_func_classes=(nn.GELU,), factory=act_func_factory, klass=act_func_class))
+		model.apply(functools.partial(models.pending_replace_act_func, actions=actions, act_func_classes=(nn.GELU, nn.SiLU), factory=act_func_factory, klass=act_func_class))
 	else:
 		raise ValueError(f"Invalid model type: {model_type}")
 
