@@ -25,7 +25,7 @@ class FCNet(nn.Module):
 			nn.Linear(in_features=in_features, out_features=out_features, bias=False),
 			nn.BatchNorm1d(num_features=out_features),
 			act_func_factory(inplace=True),
-			nn.Dropout1d(p=dropout_prob, inplace=True),
+			nn.Dropout1d(p=dropout_prob),
 		)
 
 	def forward(self, x):
