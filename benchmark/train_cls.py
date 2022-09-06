@@ -4,6 +4,7 @@
 # Imports
 import os
 import sys
+import math
 import timeit
 import argparse
 import fractions
@@ -17,6 +18,7 @@ import torchvision.models
 import torchvision.datasets
 import torchvision.transforms as transforms
 import wandb
+import models
 import util
 
 # Main function
@@ -74,8 +76,8 @@ def main():
 		util.print_wandb_config(C)
 		torch.backends.cudnn.benchmark = C.cudnn_bench
 
-		train_loader, valid_loader, num_classes, in_channels = load_dataset(C)
-		model = load_model(C, num_classes, in_channels, details=args.model_details)
+		train_loader, valid_loader, num_classes, in_shape = load_dataset(C)
+		model = load_model(C, num_classes, in_shape, details=args.model_details)
 		output_layer, criterion = load_criterion(C)
 		optimizer = load_optimizer(C, model.parameters())
 		scheduler = load_scheduler(C, optimizer)
@@ -94,7 +96,7 @@ def load_dataset(C):
 
 	if C.dataset in ('MNIST', 'FashionMNIST'):
 		num_classes = 10
-		in_channels = 1
+		in_shape = (1, 28, 28)
 		if C.dataset == 'MNIST':
 			tfrm = transforms.Compose([
 				transforms.ToTensor(),
@@ -114,7 +116,7 @@ def load_dataset(C):
 
 	elif C.dataset in ('CIFAR10', 'CIFAR100'):
 		num_classes = int(C.dataset[5:])
-		in_channels = 3
+		in_shape = (3, 32, 32)
 		train_tfrm = transforms.Compose([
 			transforms.RandomCrop(size=32, padding=4),
 			transforms.RandomHorizontalFlip(),
@@ -131,7 +133,7 @@ def load_dataset(C):
 
 	elif C.dataset == 'TinyImageNet':
 		num_classes = 200
-		in_channels = 3
+		in_shape = (3, 64, 64)
 		train_tfrm = transforms.Compose([
 			transforms.RandomCrop(size=64, padding=8),
 			transforms.RandomHorizontalFlip(),
@@ -158,7 +160,7 @@ def load_dataset(C):
 			folder_path = os.path.join(C.dataset_path, 'ILSVRC2012')
 		else:
 			raise AssertionError
-		in_channels = 3
+		in_shape = (3, 224, 224)
 		train_tfrm = transforms.Compose([
 			transforms.RandomResizedCrop(size=224),
 			transforms.RandomHorizontalFlip(),
@@ -180,46 +182,52 @@ def load_dataset(C):
 	train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=C.batch_size, num_workers=C.dataset_workers, shuffle=True, pin_memory=True)
 	valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=C.batch_size, num_workers=C.dataset_workers, shuffle=False, pin_memory=True)
 
-	return train_loader, valid_loader, num_classes, in_channels
+	return train_loader, valid_loader, num_classes, in_shape
 
 # Load the model
-def load_model(C, num_classes, in_channels, details=False):
+def load_model(C, num_classes, in_shape, details=False):
 
 	model_type, _, model_variant = C.model.partition('-')
 
-	model_factory = getattr(torchvision.models, model_type, None)
-	if model_factory is None or not model_type.islower() or model_type.startswith('_') or not callable(model_factory):
-		raise ValueError(f"Invalid model type: {model_type}")
+	def model_variant_int(default):
+		if not model_variant:
+			return default
+		try:
+			return int(model_variant)
+		except ValueError:
+			raise ValueError(f"Invalid model variant: {model_variant}")
 
+	is_fcnet = model_type == 'fcnet'
 	is_resnet = model_type in ('resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152', 'resnext50_32x4d', 'resnext101_32x8d', 'resnext101_64x4d', 'wide_resnet50_2', 'wide_resnet101_2')
 
-	kwargs = {}
-	if is_resnet:
-		pass
-	else:
-		raise ValueError(f"Unhandled model type: {model_type}")
-
-	model = model_factory(num_classes=num_classes, **kwargs)
-
-	actions = []
 	act_func_factory = get_act_func_factory(C)
 	act_func_class = act_func_factory().__class__
 
-	if is_resnet:
-		if in_channels != model.conv1.in_channels:
-			util.replace_conv2d(model, 'conv1', model.conv1, dict(in_channels=in_channels), pending=False)
-		if model_variant:
-			try:
-				conv1_out_channels = int(model_variant)
-			except ValueError:
-				raise ValueError(f"Invalid model variant: {model_variant}")
-			if conv1_out_channels != model.conv1.out_channels:
-				model.apply(functools.partial(util.apply_scale_channels, actions=actions, factor=fractions.Fraction(conv1_out_channels, model.conv1.out_channels), skip_inputs=(model.conv1,), skip_outputs=(model.fc,)))
-		model.apply(functools.partial(util.apply_replace_act_func, actions=actions, act_func_classes=(nn.ReLU,), factory=act_func_factory, klass=act_func_class))
+	if is_fcnet:
+		model = models.FCNet(in_features=math.prod(in_shape), num_classes=num_classes, num_layers=model_variant_int(default=8), act_func_factory=act_func_factory)
+	elif is_resnet:
+		model_factory = getattr(torchvision.models, model_type, None)
+		if model_factory is None or not model_type.islower() or model_type.startswith('_') or not callable(model_factory):
+			raise ValueError(f"Invalid torchvision model type: {model_type}")
+		model = model_factory(num_classes=num_classes)
 	else:
-		raise ValueError(f"Unhandled model type: {model_type}")
+		raise ValueError(f"Invalid model type: {model_type}")
 
-	util.execute_apply_actions(actions)
+	actions = []
+	if is_fcnet:
+		pass
+	elif is_resnet:
+		in_channels = in_shape[0]
+		if in_channels != model.conv1.in_channels:
+			models.replace_conv2d(model, 'conv1', model.conv1, dict(in_channels=in_channels), pending=False)
+		conv1_out_channels = model_variant_int(default=model.conv1.out_channels)
+		if conv1_out_channels != model.conv1.out_channels:
+			model.apply(functools.partial(models.pending_scale_channels, actions=actions, factor=fractions.Fraction(conv1_out_channels, model.conv1.out_channels), skip_inputs=(model.conv1,), skip_outputs=(model.fc,)))
+		model.apply(functools.partial(models.pending_replace_act_func, actions=actions, act_func_classes=(nn.ReLU,), factory=act_func_factory, klass=act_func_class))
+	else:
+		raise ValueError(f"Invalid model type: {model_type}")
+
+	models.execute_pending_actions(actions)
 
 	if details:
 		print(model)
