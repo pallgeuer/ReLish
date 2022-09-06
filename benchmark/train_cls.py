@@ -72,8 +72,7 @@ def main():
 
 		C = wandb.config
 		util.print_wandb_config(C)
-		if C.cudnn_bench:
-			torch.backends.cudnn.benchmark = True
+		torch.backends.cudnn.benchmark = C.cudnn_bench
 
 		train_loader, valid_loader, num_classes, in_channels = load_dataset(C)
 		model = load_model(C, num_classes, in_channels, details=args.model_details)
