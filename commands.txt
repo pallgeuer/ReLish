@@ -65,9 +65,9 @@ CLASSIFICATION DATASETS
 	MNIST_ROOT="$DATASETS"/MNIST
 	FASHION_MNIST_ROOT="$DATASETS"/FashionMNIST
 	CIFAR_ROOT="$DATASETS"/CIFAR
+	TINY_IMAGENET_ROOT="$DATASETS"/TinyImageNet
 	IMAGENETTE_ROOT="$DATASETS"/Imagenette
 	IMAGEWOOF_ROOT="$DATASETS"/Imagewoof
-	TINY_IMAGENET_ROOT="$DATASETS"/TinyImageNet
 	IMAGENET1K_ROOT="$DATASETS"/ImageNet1K
 
 - MNIST:
@@ -89,14 +89,6 @@ CLASSIFICATION DATASETS
 	tar -xf "$CIFAR_ROOT"/cifar-100-python.tar.gz -C "$CIFAR_ROOT" && rm "$CIFAR_ROOT"/cifar-100-python.tar.gz
 	rm -rf "$CIFAR_ROOT"/cifar-100-python/file.txt~
 
-- Imagenette:
-	wget -P "$IMAGENETTE_ROOT" https://s3.amazonaws.com/fast-ai-imageclas/imagenette2-320.tgz
-	tar -xf "$IMAGENETTE_ROOT"/imagenette2-320.tgz -C "$IMAGENETTE_ROOT" && rm "$IMAGENETTE_ROOT"/imagenette2-320.tgz
-
-- Imagewoof:
-	wget -P "$IMAGEWOOF_ROOT" https://s3.amazonaws.com/fast-ai-imageclas/imagewoof2-320.tgz
-	tar -xf "$IMAGEWOOF_ROOT"/imagewoof2-320.tgz -C "$IMAGEWOOF_ROOT" && rm "$IMAGEWOOF_ROOT"/imagewoof2-320.tgz
-
 - Tiny ImageNet:
 	wget -P "$TINY_IMAGENET_ROOT" https://image-net.org/data/tiny-imagenet-200.zip
 	unzip -q "$TINY_IMAGENET_ROOT"/tiny-imagenet-200.zip -d "$TINY_IMAGENET_ROOT" && rm "$TINY_IMAGENET_ROOT"/tiny-imagenet-200.zip
@@ -106,6 +98,14 @@ CLASSIFICATION DATASETS
 	VALDIR="$TINY_IMAGENET_ROOT"/tiny-imagenet-200/val
 	cut -f1,2 < "$VALDIR/val_annotations.txt" | while read file wnid; do mkdir -p "$VALDIR/$wnid"; mv "$VALDIR/images/$file" "$VALDIR/$wnid/"; done
 	rm -r "$VALDIR"/{images,val_annotations.txt}
+
+- Imagenette:
+	wget -P "$IMAGENETTE_ROOT" https://s3.amazonaws.com/fast-ai-imageclas/imagenette2-320.tgz
+	tar -xf "$IMAGENETTE_ROOT"/imagenette2-320.tgz -C "$IMAGENETTE_ROOT" && rm "$IMAGENETTE_ROOT"/imagenette2-320.tgz
+
+- Imagewoof:
+	wget -P "$IMAGEWOOF_ROOT" https://s3.amazonaws.com/fast-ai-imageclas/imagewoof2-320.tgz
+	tar -xf "$IMAGEWOOF_ROOT"/imagewoof2-320.tgz -C "$IMAGEWOOF_ROOT" && rm "$IMAGEWOOF_ROOT"/imagewoof2-320.tgz
 
 - ImageNet1K:
 	xdg-open https://image-net.org/login.php
@@ -129,26 +129,19 @@ TRAIN CLASSIFICATION MODEL
 - Configuration:
 	ENV=relish
 	RELISH_DIR=~/Code/ReLish
-	DATASETS=~/Datasets  # <-- Customise this if necessary!
-	MNIST_ROOT="$DATASETS"/MNIST
-	FASHION_MNIST_ROOT="$DATASETS"/FashionMNIST
-	CIFAR_ROOT="$DATASETS"/CIFAR
-	IMAGENETTE_ROOT="$DATASETS"/Imagenette
-	IMAGEWOOF_ROOT="$DATASETS"/Imagewoof
-	TINY_IMAGENET_ROOT="$DATASETS"/TinyImageNet
-	IMAGENET1K_ROOT="$DATASETS"/ImageNet1K
+	export DATASET_PATH=~/Datasets
 
 - Train single classification model:
 	cd "$RELISH_DIR"/benchmark
 	conda activate $ENV
-	./train_cls.py --dataset MNIST --dataset_path "$DATASETS"
-	./train_cls.py --dataset FashionMNIST --dataset_path "$DATASETS"
-	./train_cls.py --dataset CIFAR10 --dataset_path "$CIFAR_ROOT"
-	./train_cls.py --dataset CIFAR100 --dataset_path "$CIFAR_ROOT"
-	./train_cls.py --dataset Imagenette --dataset_path "$IMAGENETTE_ROOT"
-	./train_cls.py --dataset Imagewoof --dataset_path "$IMAGEWOOF_ROOT"
-	./train_cls.py --dataset TinyImageNet --dataset_path "$TINY_IMAGENET_ROOT"
-	./train_cls.py --dataset ImageNet1K --dataset_path "$IMAGENET1K_ROOT"
+	./train_cls.py --dataset MNIST
+	./train_cls.py --dataset FashionMNIST
+	./train_cls.py --dataset CIFAR10
+	./train_cls.py --dataset CIFAR100
+	./train_cls.py --dataset TinyImageNet
+	./train_cls.py --dataset Imagenette
+	./train_cls.py --dataset Imagewoof
+	./train_cls.py --dataset ImageNet1K
 
 - Train classification model sweep:
 	cd "$RELISH_DIR"/benchmark

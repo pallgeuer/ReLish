@@ -25,30 +25,31 @@ import util
 def main():
 
 	parser = argparse.ArgumentParser()
-	parser.add_argument('--dry', action='store_true', help='Show what would be done but do not actually run the training')
-	parser.add_argument('--no_wandb', dest='use_wandb', action='store_false', help='Do not use wandb')
-	parser.add_argument('--wandb_project', type=str, default='train_cls', metavar='NAME', help='Wandb project name')
+	parser.add_argument('--wandb_project', type=str, default='train_cls', metavar='NAME', help='Wandb project name (default: %(default)s)')
 	parser.add_argument('--wandb_entity', type=str, default=None, metavar='USER_TEAM', help='Wandb entity')
 	parser.add_argument('--wandb_group', type=str, default=None, metavar='GROUP', help='Wandb group')
 	parser.add_argument('--wandb_job_type', type=str, default=None, metavar='TYPE', help='Wandb job type')
 	parser.add_argument('--wandb_name', type=str, default=None, metavar='NAME', help='Wandb run name')
-	parser.add_argument('--dataset', type=str, default=None, metavar='NAME', help='Classification dataset to train on')
-	parser.add_argument('--dataset_path', type=str, default=None, metavar='PATH', help='Classification dataset root path')
-	parser.add_argument('--dataset_workers', type=int, default=2, metavar='NUM', help='Number of worker processes to use for dataset loading')
-	parser.add_argument('--model', type=str, default='resnet18', metavar='MODEL', help='Classification model')
+	parser.add_argument('--dataset', type=str, default='CIFAR10', metavar='NAME', help='Classification dataset to train on (default: %(default)s)')
+	parser.add_argument('--dataset_path', type=str, default=None, metavar='PATH', help='Classification dataset root path (default: ENV{DATASET_PATH} or ~/Datasets)')
+	parser.add_argument('--dataset_workers', type=int, default=2, metavar='NUM', help='Number of worker processes to use for dataset loading (default: %(default)d)')
+	parser.add_argument('--model', type=str, default='resnet18', metavar='MODEL', help='Classification model (default: %(default)s)')
 	parser.add_argument('--model_details', action='store_true', help='Whether to show model details')
-	parser.add_argument('--act_func', type=str, default='relu', metavar='NAME', help='Activation function')
-	parser.add_argument('--optimizer', type=str, default='adam', metavar='NAME', help='Optimizer')
-	parser.add_argument('--scheduler', type=str, default='multisteplr', metavar='NAME', help='Learning rate scheduler')
-	parser.add_argument('--loss', type=str, default='nllloss', metavar='NAME', help='Loss function')
-	parser.add_argument('--epochs', type=int, default=80, metavar='NUM', help='Number of epochs to train')
-	parser.add_argument('--batch_size', type=int, default=32, metavar='SIZE', help='Training batch size')
-	parser.add_argument('--device', type=str, default='cuda', metavar='DEVICE', help='PyTorch device to run on')
+	parser.add_argument('--act_func', type=str, default='relu', metavar='NAME', help='Activation function (default: %(default)s)')
+	parser.add_argument('--optimizer', type=str, default='adam', metavar='NAME', help='Optimizer (default: %(default)s)')
+	parser.add_argument('--scheduler', type=str, default='multisteplr', metavar='NAME', help='Learning rate scheduler (default: %(default)s)')
+	parser.add_argument('--loss', type=str, default='nllloss', metavar='NAME', help='Loss function (default: %(default)s)')
+	parser.add_argument('--epochs', type=int, default=80, metavar='NUM', help='Number of epochs to train (default: %(default)s)')
+	parser.add_argument('--batch_size', type=int, default=64, metavar='SIZE', help='Training batch size (default: %(default)s)')
+	parser.add_argument('--device', type=str, default='cuda', metavar='DEVICE', help='PyTorch device to run on (default: %(default)s)')
 	parser.add_argument('--no_cudnn_bench', dest='cudnn_bench', action='store_false', help='Disable cuDNN benchmark mode to save memory over speed')
+	parser.add_argument('--no_wandb', dest='use_wandb', action='store_false', help='Do not use wandb')
+	parser.add_argument('--dry', action='store_true', help='Show what would be done but do not actually run the training')
 	args = parser.parse_args()
 
-	if args.dataset_path is not None:
-		args.dataset_path = os.path.expanduser(args.dataset_path)
+	if args.dataset_path is None:
+		args.dataset_path = os.environ.get('DATASET_PATH') or '~/Datasets'
+	args.dataset_path = os.path.expanduser(args.dataset_path)
 
 	log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'log')
 	with contextlib.suppress(OSError):
@@ -128,8 +129,9 @@ def load_dataset(C):
 			tfrm_normalize_rgb,
 		])
 		dataset_class = getattr(torchvision.datasets, C.dataset)
-		train_dataset = dataset_class(root=C.dataset_path, train=True, transform=train_tfrm)
-		valid_dataset = dataset_class(root=C.dataset_path, train=False, transform=valid_tfrm)
+		folder_path = os.path.join(C.dataset_path, 'CIFAR')
+		train_dataset = dataset_class(root=folder_path, train=True, transform=train_tfrm)
+		valid_dataset = dataset_class(root=folder_path, train=False, transform=valid_tfrm)
 
 	elif C.dataset == 'TinyImageNet':
 		num_classes = 200
@@ -144,20 +146,20 @@ def load_dataset(C):
 			transforms.ToTensor(),
 			tfrm_normalize_rgb,
 		])
-		folder_path = os.path.join(C.dataset_path, 'tiny-imagenet-200')
+		folder_path = os.path.join(C.dataset_path, C.dataset, 'tiny-imagenet-200')
 		train_dataset = torchvision.datasets.ImageFolder(root=os.path.join(folder_path, 'train'), transform=train_tfrm)
 		valid_dataset = torchvision.datasets.ImageFolder(root=os.path.join(folder_path, 'val'), transform=valid_tfrm)
 
 	elif C.dataset in ('Imagenette', 'Imagewoof', 'ImageNet1K'):
 		if C.dataset == 'Imagenette':
 			num_classes = 10
-			folder_path = os.path.join(C.dataset_path, 'imagenette2-320')
+			folder_path = os.path.join(C.dataset_path, C.dataset, 'imagenette2-320')
 		elif C.dataset == 'Imagewoof':
 			num_classes = 10
-			folder_path = os.path.join(C.dataset_path, 'imagewoof2-320')
+			folder_path = os.path.join(C.dataset_path, C.dataset, 'imagewoof2-320')
 		elif C.dataset == 'ImageNet1K':
 			num_classes = 1000
-			folder_path = os.path.join(C.dataset_path, 'ILSVRC2012')
+			folder_path = os.path.join(C.dataset_path, C.dataset, 'ILSVRC2012')
 		else:
 			raise AssertionError
 		in_shape = (3, 224, 224)

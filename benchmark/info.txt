@@ -20,42 +20,42 @@ Classification Datasets
 	- 10,000 validation samples
 	- 32x32 RGB images
 	- 10 classes
-	- {DATASET_PATH}/cifar-10-batches-py/*
+	- {DATASET_PATH}/CIFAR/cifar-10-batches-py/*
 
 - CIFAR100:
 	- 50,000 training samples
 	- 10,000 validation samples
 	- 32x32 RGB images
 	- 100 classes
-	- {DATASET_PATH}/cifar-100-python/*
-
-- Imagenette:
-	- 9,469 training samples
-	- 3,925 validation samples
-	- Shorter side 320 RGB images => 224x224 RGB images
-	- 10 classes
-	- {DATASET_PATH}/imagenette2-320/{train,val}/n*/*
-
-- Imagewoof:
-	- 9,025 training samples
-	- 3,929 validation samples
-	- Shorter side 320 RGB images => 224x224 RGB images
-	- 10 classes
-	- {DATASET_PATH}/imagewoof2-320/{train,val}/n*/*
+	- {DATASET_PATH}/CIFAR/cifar-100-python/*
 
 - Tiny ImageNet:
 	- 100,000 training samples
 	- 10,000 validation samples
 	- 64x64 RGB images
 	- 200 classes
-	- {DATASET_PATH}/tiny-imagenet-200/{train,val}/n*/*
+	- {DATASET_PATH}/TinyImageNet/tiny-imagenet-200/{train,val}/n*/*
+
+- Imagenette:
+	- 9,469 training samples
+	- 3,925 validation samples
+	- Shorter side 320 RGB images => 224x224 RGB images
+	- 10 classes
+	- {DATASET_PATH}/Imagenette/imagenette2-320/{train,val}/n*/*
+
+- Imagewoof:
+	- 9,025 training samples
+	- 3,929 validation samples
+	- Shorter side 320 RGB images => 224x224 RGB images
+	- 10 classes
+	- {DATASET_PATH}/Imagewoof/imagewoof2-320/{train,val}/n*/*
 
 - ImageNet1K:
 	- 1,281,167 training samples
 	- 50,000 validation samples
 	- RGB images => 224x224 RGB images
 	- 1000 classes
-	- {DATASET_PATH}/ILSVRC2012/{train,val}/n*/*
+	- {DATASET_PATH}/ImageNet1K/ILSVRC2012/{train,val}/n*/*
 
 Classification Models
 =====================
