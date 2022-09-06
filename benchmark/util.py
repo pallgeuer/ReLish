@@ -107,7 +107,8 @@ class ExceptionPrinter(contextlib.AbstractContextManager):
 		return self
 
 	def __exit__(self, exc_type, exc_val, exc_tb):
-		traceback.print_exception(exc_type, exc_val, exc_tb)
+		if exc_type is not None:
+			traceback.print_exception(exc_type, exc_val, exc_tb)
 		return False
 
 # Print wandb configuration
