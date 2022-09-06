@@ -98,3 +98,9 @@ Note: Number of parameters is evaluated for CIFAR10
 	 81,426,762 = resnext101_64x4d-64 = resnext101_64x4d
 	 86,762,826 = resnext101_32x8d-64 = resnext101_32x8d
 	124,858,186 = wide_resnet101_2-64 = wide_resnet101_2
+
+- ConvNeXt:
+	 27,827,818 = convnext_tiny
+	 49,462,378 = convnext_small
+	 87,576,714 = convnext_base
+	196,245,706 = convnext_large
