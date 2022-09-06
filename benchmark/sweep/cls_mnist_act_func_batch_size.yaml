@@ -7,8 +7,6 @@ metric:
 parameters:
   dataset:
     values: ['MNIST', 'FashionMNIST']
-  dataset_path:
-    value: ~/Datasets
   act_func:
     values: ['relu', 'silu', 'mish']
   model:

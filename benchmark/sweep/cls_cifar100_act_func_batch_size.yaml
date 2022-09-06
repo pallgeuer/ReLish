@@ -7,8 +7,6 @@ metric:
 parameters:
   dataset:
     value: CIFAR100
-  dataset_path:
-    value: ~/Datasets/CIFAR
   act_func:
     values: ['relu', 'silu', 'mish']
   model:
