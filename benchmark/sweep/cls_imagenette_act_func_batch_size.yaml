@@ -1,0 +1,17 @@
+program: train_cls.py
+project: cls_imagenette
+method: grid
+metric:
+  goal: minimize
+  name: valid_top1_max
+parameters:
+  dataset:
+    values: ['TinyImageNet', 'Imagenette', 'Imagewoof']
+  act_func:
+    values: ['relu', 'silu', 'mish']
+  model:
+    value: resnet50
+  epochs:
+    value: 120
+  batch_size:
+    values: [32, 64, 128, 256]
