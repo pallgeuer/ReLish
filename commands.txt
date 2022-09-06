@@ -1,15 +1,6 @@
 Commands
 ========
 
-INSTALL CUDA
-------------
-
-- Install required CUDA version (TODO: Is this required for pre-built conda PyTorch install?):
-	cd ~/Programs/DeepStack
-	./install-cuda-10.2-cudnn-7.6.5.sh  # Only for <=7.5 GPUs
-	./install-cuda-11.3-cudnn-8.2.1.sh
-	./install-cuda-11.6-cudnn-8.4.1.sh
-
 INSTALL CONDA ENVIRONMENT
 -------------------------
 
@@ -17,7 +8,6 @@ INSTALL CONDA ENVIRONMENT
 	ENV=relish
 	PYTHON=3.9
 	CUDA_VERSION=11.6
-	CUDA_INSTALL_DIR=/usr/local/cuda-$CUDA_VERSION
 	PYTORCH=1.12
 
 - Create a conda environment:
@@ -43,17 +33,7 @@ if [ -n "$SUPPRESSED_PYTHONPATH" ]; then
 fi
 # EOF
 EOM
-	cat << EOM > "$CONDA_ENV_DIR/etc/conda/activate.d/env_vars.sh"
-#!/bin/sh
-source '$CUDA_INSTALL_DIR/add_path.sh'
-# EOF
-EOM
-	cat << EOM > "$CONDA_ENV_DIR/etc/conda/deactivate.d/env_vars.sh"
-#!/bin/sh
-source '$CUDA_INSTALL_DIR/remove_path.sh'
-# EOF
-EOM
-	chmod +x "$CONDA_ENV_DIR/etc/conda/activate.d/pythonpath.sh" "$CONDA_ENV_DIR/etc/conda/deactivate.d/pythonpath.sh" "$CONDA_ENV_DIR/etc/conda/activate.d/env_vars.sh" "$CONDA_ENV_DIR/etc/conda/deactivate.d/env_vars.sh"
+	chmod +x "$CONDA_ENV_DIR/etc/conda/activate.d/pythonpath.sh" "$CONDA_ENV_DIR/etc/conda/deactivate.d/pythonpath.sh"
 
 - Install PyTorch:
 	conda activate $ENV
@@ -62,9 +42,7 @@ EOM
 - Install OpenMM packages:
 	conda activate $ENV
 	pip install --upgrade openmim
-	mim install mmcv-full
-	mim install mmcls
-	mim install mmdet
+	mim install mmcv-full mmcls mmdet
 	mim list
 		mmcls      0.23.2     https://github.com/open-mmlab/mmclassification
 		mmcv-full  1.6.1      https://github.com/open-mmlab/mmcv
@@ -83,7 +61,7 @@ CLASSIFICATION DATASETS
 -----------------------
 
 - Configuration:
-	DATASETS=~/Datasets
+	DATASETS=~/Datasets  # <-- Customise this if necessary!
 	MNIST_ROOT="$DATASETS"/MNIST
 	FASHION_MNIST_ROOT="$DATASETS"/FashionMNIST
 	CIFAR_ROOT="$DATASETS"/CIFAR
@@ -151,7 +129,7 @@ TRAIN CLASSIFICATION MODEL
 - Configuration:
 	ENV=relish
 	RELISH_DIR=~/Code/ReLish
-	DATASETS=~/Datasets
+	DATASETS=~/Datasets  # <-- Customise this if necessary!
 	MNIST_ROOT="$DATASETS"/MNIST
 	FASHION_MNIST_ROOT="$DATASETS"/FashionMNIST
 	CIFAR_ROOT="$DATASETS"/CIFAR
