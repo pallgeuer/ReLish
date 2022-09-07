@@ -148,4 +148,40 @@ TRAIN CLASSIFICATION MODEL
 	conda activate $ENV
 	export WANDB_DIR="$RELISH_DIR"/benchmark/log
 	wandb sweep sweep/cls_SWEEPNAME.yaml
-	<WANDB AGENT COMMAND FROM ABOVE OUTPUT>
+	<WANDB AGENT COMMAND FROM ABOVE OUTPUT>  # [--count NUM]
+
+CUSTOM WANDB CHARTS
+-------------------
+
+- Add a section for custom charts:
+	Go to wandb main project page of concern
+	Scroll all the way down and click 'Add a section'
+	Click on the ellipsis at the top right of the new section and rename the section to 'Custom Charts' or whatever is desired
+
+- Adding a custom chart:
+	In the custom charts section click 'Add Panel -> Custom chart'
+	Select the type of plot you want on the top left (start with 'Scatter plot' if you're not sure)
+	Update the data query:
+		Click the appearing X above 'limit:' to make sure all data you are looking for will be plotted (just be careful in selecting your data now though)
+		Click the ellipsis and add 'filters:'
+			Click the down arrow on '# filters' and configure as many filters as appropriate
+			Note that all data in the project (including all data from all sweeps and individual runs) is queried, so best be specific/explicit about all possible configs
+			Filters: State == finished, Sweep (explicit sweep, or != null), All configs that could possibly affect the output y-value (even if there is currently only one choice)
+			Note at time of writing there is a bug that you cannot expand the filters again once you've had them open (only choice is to completely delete the filters with the X and do them all again OR edit the filters in the Vega-Lite editor, that seems to be more stable)
+		Select the keys (that you're interested in from the various categories available (use the drop down arrows, plus buttons, and click between the quotation marks)
+		Categories:
+			config: Single values corresponding to run config parameters
+			summary: Single final logged values of a run, i.e. as presented in the run table
+			history*: Series of logged data for a particular run
+	Select the available chart fields from the keys you just selected, and hopefully you can see a suitable preview of the chart
+	Use groupKeys if you don't want each run to be a separate data series, but instead for example all runs with a particular config parameter value
+
+- Customise the definition of a scatter plot -> Click 'Edit' next to 'Scatter plot':
+	If the x-axis data is not quantitative, then change encoding.x.type to 'nominal' (hover for more options and explanations):
+		"encoding": {
+			"x": {"field": "${field:x}", "type": "nominal"},
+	If you don't need 0 to be shown on an axis, e.g. the y-axis then add encoding.y.scale.zero = false:
+		"encoding": {
+			"y": {"field": "groupedY", "type": "quantitative", "axis": {"title": "${field:y}"}, "scale": {"zero": false}},
+
+- For totally custom Vega-Lite plots refer to the 'vega' directory

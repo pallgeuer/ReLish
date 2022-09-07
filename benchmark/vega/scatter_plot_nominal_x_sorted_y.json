@@ -1,0 +1,41 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v4.json",
+  "description": "Scatter plot with nominal x-values that are sorted by y-value",
+  "data": {"name": "wandb"},
+  "transform": [
+    {"calculate": "if('${field:groupKey}' === ''  || datum['${field:groupKey}'] === '', datum.name, datum['${field:groupKey}'])", "as": "groupKey"},
+    {
+      "groupby": ["${field:x}", "groupKey"],
+      "joinaggregate": [{"op": "average", "field": "${field:y}", "as": "averagedY"}]
+    }
+  ],
+  "title": "${string:title}",
+  "layer": [
+    {
+      "mark": {"type": "point", "size": 30, "filled": true, "tooltip": {"content": "encoding"}},
+      "encoding": {
+        "x": {"field": "${field:x}", "type": "ordinal", "sort": "-y", "axis": {"title": "${field:x}"}},
+        "y": {"field": "averagedY", "type": "quantitative", "axis": {"title": "${field:y}"}, "scale": {"zero": false}},
+        "color": {
+          "field": "groupKey",
+          "type": "nominal",
+          "scale": {"range": "category"},
+          "legend": {"title": null}
+        }
+      }
+    },
+    {
+      "mark": {"type": "point", "size": 10, "opacity": 0.3, "strokeWidth": 1},
+      "encoding": {
+        "x": {"field": "${field:x}", "type": "ordinal", "sort": null, "axis": {"title": "${field:x}"}},
+        "y": {"field": "${field:y}", "type": "quantitative", "axis": {"title": "${field:y}"}, "scale": {"zero": false}},
+        "color": {
+          "field": "groupKey",
+          "type": "nominal",
+          "scale": {"range": "category"},
+          "legend": {"title": null}
+        }
+      }
+    }
+  ]
+}
