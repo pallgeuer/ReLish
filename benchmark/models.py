@@ -2,6 +2,7 @@
 
 # Import
 import fractions
+from typing import Union, Type, Tuple
 import torch.nn as nn
 
 #
@@ -79,14 +80,13 @@ def pending_scale_channels(module, actions, factor: fractions.Fraction, skip_inp
 				)))
 
 # Enqueue pending actions to replace certain activation functions with another activation function type
-def pending_replace_act_func(module, actions, act_func_classes: tuple, factory, klass):
+def pending_replace_act_func(module, actions, act_func_classes: Union[Type, Tuple[Type, ...]], factory, klass):
 	# noinspection PyProtectedMember
 	for attr_key in module._modules.keys():
 		submodule = getattr(module, attr_key)
 		if isinstance(submodule, act_func_classes):
 			if submodule.__class__ != klass:
 				actions.append((replace_submodule, module, attr_key, factory, (), dict(inplace=getattr(submodule, 'inplace', False))))
-			break
 
 # Replace a nn.Conv2D with a new one (pending action if actions is provided)
 def replace_conv2d(module, attr_key, submodule, replace_kwargs, actions=None):

@@ -109,3 +109,6 @@ Note: Number of parameters is evaluated for CIFAR10
 	 20,190,298 = efficientnet_v2_s
 	 52,871,166 = efficientnet_v2_m
 	117,247,082 = efficientnet_v2_l
+
+- SqueezeNet:
+	727,626 = squeezenet1_1
