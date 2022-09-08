@@ -35,7 +35,7 @@ def main():
 	parser.add_argument('--dataset_workers', type=int, default=2, metavar='NUM', help='Number of worker processes to use for dataset loading (default: %(default)d)')
 	parser.add_argument('--model', type=str, default='resnet18', metavar='MODEL', help='Classification model (default: %(default)s)')
 	parser.add_argument('--model_details', action='store_true', help='Whether to show model details')
-	parser.add_argument('--act_func', type=str, default='relu', metavar='NAME', help='Activation function (default: %(default)s)')
+	parser.add_argument('--act_func', type=str, default='original', metavar='NAME', help='Activation function (default: %(default)s)')
 	parser.add_argument('--optimizer', type=str, default='adam', metavar='NAME', help='Optimizer (default: %(default)s)')
 	parser.add_argument('--scheduler', type=str, default='multisteplr', metavar='NAME', help='Learning rate scheduler (default: %(default)s)')
 	parser.add_argument('--loss', type=str, default='nllloss', metavar='NAME', help='Loss function (default: %(default)s)')
@@ -205,8 +205,11 @@ def load_model(C, num_classes, in_shape, details=False):
 	is_efficientnet = model_type in ('efficientnet_v2_s', 'efficientnet_v2_m', 'efficientnet_v2_l')
 	is_squeezenet = model_type == 'squeezenet1_1'
 
-	act_func_factory = get_act_func_factory(C)
-	act_func_class = act_func_factory().__class__
+	if C.act_func == 'original':
+		act_func_factory = act_func_class = None
+	else:
+		act_func_factory = get_act_func_factory(C)
+		act_func_class = act_func_factory().__class__
 	in_channels = in_shape[0]
 
 	if is_fcnet:
@@ -220,22 +223,22 @@ def load_model(C, num_classes, in_shape, details=False):
 		raise ValueError(f"Invalid model type: {model_type}")
 
 	actions = []
-	if is_fcnet:
-		pass
-	elif is_resnet:
-		models.replace_conv2d_in_channels(model, 'conv1', in_channels=in_channels)
-		conv1_out_channels = model_variant_int(default=model.conv1.out_channels)
-		if conv1_out_channels != model.conv1.out_channels:
-			model.apply(functools.partial(models.pending_scale_channels, actions=actions, factor=fractions.Fraction(conv1_out_channels, model.conv1.out_channels), skip_inputs=(model.conv1,), skip_outputs=(model.fc,)))
-		model.apply(functools.partial(models.pending_replace_act_func, actions=actions, act_func_classes=nn.ReLU, factory=act_func_factory, klass=act_func_class))
-	elif is_convnext or is_efficientnet:  # Note: EfficientNet keeps its sigmoid activation scalers
-		models.replace_conv2d_in_channels(model.features[0], '0', in_channels=in_channels, actions=actions)
-		model.apply(functools.partial(models.pending_replace_act_func, actions=actions, act_func_classes=(nn.GELU, nn.SiLU), factory=act_func_factory, klass=act_func_class))
-	elif is_squeezenet:
-		models.replace_conv2d_in_channels(model.features, '0', in_channels=in_channels, actions=actions)
-		model.apply(functools.partial(models.pending_replace_act_func, actions=actions, act_func_classes=nn.ReLU, factory=act_func_factory, klass=act_func_class))
-	else:
-		raise ValueError(f"Invalid model type: {model_type}")
+	if not is_fcnet:
+		if is_resnet:
+			models.replace_conv2d_in_channels(model, 'conv1', in_channels=in_channels)
+			conv1_out_channels = model_variant_int(default=model.conv1.out_channels)
+			if conv1_out_channels != model.conv1.out_channels:
+				model.apply(functools.partial(models.pending_scale_channels, actions=actions, factor=fractions.Fraction(conv1_out_channels, model.conv1.out_channels), skip_inputs=(model.conv1,), skip_outputs=(model.fc,)))
+		elif is_convnext or is_efficientnet:
+			models.replace_conv2d_in_channels(model.features[0], '0', in_channels=in_channels)
+			if is_efficientnet:
+				models.replace_submodule(model.features[1][0], 'stochastic_depth', models.Clone, (), {})
+		elif is_squeezenet:
+			models.replace_conv2d_in_channels(model.features, '0', in_channels=in_channels)
+		else:
+			raise ValueError(f"Invalid model type: {model_type}")
+		if act_func_factory:  # Note: EfficientNet keeps its sigmoid activation scalers
+			model.apply(functools.partial(models.pending_replace_act_func, actions=actions, act_func_classes=(nn.ReLU, nn.GELU, nn.SiLU), factory=act_func_factory, klass=act_func_class))
 
 	models.execute_pending_actions(actions)
 

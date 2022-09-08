@@ -12,8 +12,10 @@ import torch.nn as nn
 # Fully connected classification network
 class FCNet(nn.Module):
 
-	def __init__(self, in_features, num_classes, num_layers, layer_features=384, act_func_factory=nn.ReLU, dropout_prob=0.2):
+	def __init__(self, in_features, num_classes, num_layers, layer_features=384, act_func_factory=None, dropout_prob=0.2):
 		super().__init__()
+		if act_func_factory is None:
+			act_func_factory = nn.ReLU
 		self.layers = nn.Sequential(
 			self._layer_block(in_features, layer_features, act_func_factory, dropout_prob),
 			*(self._layer_block(layer_features, layer_features, act_func_factory, dropout_prob) for _ in range(num_layers - 1)),
@@ -31,6 +33,17 @@ class FCNet(nn.Module):
 
 	def forward(self, x):
 		return self.layers(x.view(x.shape[0], -1))
+
+#
+# Modules
+#
+
+# Module that simply clones a tensor
+class Clone(nn.Module):
+
+	# noinspection PyMethodMayBeStatic
+	def forward(self, tensor):
+		return tensor.clone()
 
 #
 # Utilities
