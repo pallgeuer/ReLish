@@ -38,12 +38,19 @@ class FCNet(nn.Module):
 # Modules
 #
 
+# Module that simply passes through a tensor
+class Identity(nn.Module):
+
+	# noinspection PyMethodMayBeStatic
+	def forward(self, x):
+		return x
+
 # Module that simply clones a tensor
 class Clone(nn.Module):
 
 	# noinspection PyMethodMayBeStatic
-	def forward(self, tensor):
-		return tensor.clone()
+	def forward(self, x):
+		return x.clone()
 
 #
 # Utilities
