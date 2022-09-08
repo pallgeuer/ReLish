@@ -371,7 +371,7 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 		params_grad=sum(p.numel() for p in model.parameters() if p.requires_grad),
 	))
 
-	epoch_stamp = timeit.default_timer()
+	init_epoch_stamp = epoch_stamp = timeit.default_timer()
 	for epoch in range(1, C.epochs + 1):
 
 		print('-' * 80)
@@ -385,8 +385,9 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 		num_train_samples = 0
 		train_loss = 0
 		train_topk = [0] * 5
+		init_detail_stamp = last_detail_stamp = timeit.default_timer()
 
-		for data, target in train_loader:
+		for batch_num, (data, target) in enumerate(train_loader):
 
 			num_in_batch = data.shape[0]
 			data = data.to(device, non_blocking=True)
@@ -406,6 +407,11 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 			for k in range(5):
 				train_topk[k] += batch_topk_sum[k]
 
+			detail_stamp = timeit.default_timer()
+			if detail_stamp - last_detail_stamp >= 2.0:
+				last_detail_stamp = detail_stamp
+				print(f"\x1b[2K\r --> [{util.format_duration(detail_stamp - init_detail_stamp)}] Trained {(batch_num + 1) / num_train_batches:.1%}: Mean loss {train_loss / num_train_samples:#.4g}, Top-k ({', '.join(f'{topk / num_train_samples:.2%}' for topk in reversed(train_topk))})", end='')
+
 		train_loss /= num_train_samples
 		for k in range(5):
 			train_topk[k] /= num_train_samples
@@ -414,7 +420,8 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 		for k in range(5):
 			log[f'train_top{k + 1}'] = train_topk[k]
 
-		print(f"Trained {num_train_samples} samples in {num_train_batches} batches: Mean loss {train_loss:#.4g}, Top-k ({', '.join(f'{topk:.2%}' for topk in reversed(train_topk))})")
+		print(f"\x1b[2K\rTrained {num_train_samples} samples in {num_train_batches} batches in time {util.format_duration(detail_stamp - init_detail_stamp)}")
+		print(f"Training results: Mean loss {train_loss:#.4g}, Top-k ({', '.join(f'{topk:.2%}' for topk in reversed(train_topk))})")
 
 		model.eval()
 
@@ -422,9 +429,10 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 		num_valid_samples = 0
 		valid_loss = 0
 		valid_topk = [0] * 5
+		init_detail_stamp = last_detail_stamp = timeit.default_timer()
 
 		with torch.inference_mode():
-			for data, target in valid_loader:
+			for batch_num, (data, target) in enumerate(valid_loader):
 
 				num_in_batch = data.shape[0]
 				data = data.to(device, non_blocking=True)
@@ -441,6 +449,11 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 				for k in range(5):
 					valid_topk[k] += batch_topk_sum[k]
 
+				detail_stamp = timeit.default_timer()
+				if detail_stamp - last_detail_stamp >= 2.0:
+					last_detail_stamp = detail_stamp
+					print(f"\x1b[2K\r --> [{util.format_duration(detail_stamp - init_detail_stamp)}] Validated {(batch_num + 1) / num_valid_batches:.1%}: Mean loss {valid_loss / num_valid_samples:#.4g}, Top-k ({', '.join(f'{topk / num_valid_samples:.2%}' for topk in reversed(valid_topk))})", end='')
+
 		valid_loss /= num_valid_samples
 		for k in range(5):
 			valid_topk[k] /= num_valid_samples
@@ -451,13 +464,14 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 			log[f'valid_top{k + 1}'] = valid_topk[k]
 			log[f'valid_top{k + 1}_max'] = valid_topk_max[k]
 
-		print(f"Validated {num_valid_samples} samples in {num_valid_batches} batches: Mean loss {valid_loss:#.4g}, Top-k ({', '.join(f'{topk:.2%}' for topk in reversed(valid_topk))})")
+		print(f"\x1b[2K\rValidated {num_valid_samples} samples in {num_valid_batches} batches in time {util.format_duration(detail_stamp - init_detail_stamp)}")
+		print(f"Validation results: Mean loss {valid_loss:#.4g}, Top-k ({', '.join(f'{topk:.2%}' for topk in reversed(valid_topk))})")
 
 		scheduler.step()
 
 		end_stamp = timeit.default_timer()
 		epoch_time = end_stamp - epoch_stamp
-		print(f"Completed epoch in {epoch_time:.3f}s")
+		print(f"Completed epoch in {epoch_time:.1f}s = {util.format_duration(epoch_time)} (total {util.format_duration(end_stamp - init_epoch_stamp)})")
 		log.update(epoch_time=epoch_time)
 		epoch_stamp = end_stamp
 

@@ -38,4 +38,14 @@ def print_wandb_config(C=None, newline=True):
 			print(f"  {key}: {value}")
 	if newline:
 		print()
+
+#
+# Misc util
+#
+
+# Format a duration as hours minutes seconds (hours can be arbitrarily large)
+def format_duration(duration):
+	m, s = divmod(int(duration), 60)
+	h, m = divmod(m, 60)
+	return f'{h:0>2}:{m:0>2}:{s:0>2}'
 # EOF
