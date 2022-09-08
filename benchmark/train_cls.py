@@ -38,6 +38,7 @@ def main():
 	parser.add_argument('--act_func', type=str, default='original', metavar='NAME', help='Activation function (default: %(default)s)')
 	parser.add_argument('--optimizer', type=str, default='adam', metavar='NAME', help='Optimizer (default: %(default)s)')
 	parser.add_argument('--scheduler', type=str, default='multisteplr', metavar='NAME', help='Learning rate scheduler (default: %(default)s)')
+	parser.add_argument('--lr_scale', type=float, default=1.0, metavar='SCALE', help='Learning rate scale relative to the default value')
 	parser.add_argument('--loss', type=str, default='nllloss', metavar='NAME', help='Loss function (default: %(default)s)')
 	parser.add_argument('--epochs', type=int, default=80, metavar='NUM', help='Number of epochs to train (default: %(default)s)')
 	parser.add_argument('--batch_size', type=int, default=64, metavar='SIZE', help='Training batch size (default: %(default)s)')
@@ -345,9 +346,9 @@ def load_criterion(C):
 # Load the optimizer
 def load_optimizer(C, model_params):
 	if C.optimizer == 'sgd':
-		return torch.optim.SGD(model_params, 0.1, momentum=0.9, weight_decay=5e-4)
+		return torch.optim.SGD(model_params, lr=0.1 * C.lr_scale, momentum=0.9, weight_decay=5e-4)
 	elif C.optimizer == 'adam':
-		return torch.optim.Adam(model_params)
+		return torch.optim.Adam(model_params, lr=0.001 * C.lr_scale)
 	else:
 		raise ValueError(f"Invalid optimizer specification: {C.optimizer}")
 
