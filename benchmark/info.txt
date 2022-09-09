@@ -67,48 +67,45 @@ Note: Number of parameters is evaluated for CIFAR10
 	2,962,954 = fcnet-13
 	4,148,746 = fcnet-21
 
-- ResNet:
-	    703,386 = resnet18-16
-	  1,336,538 = resnet34-16
-	  1,455,930 = resnext50_32x4d-16
-	  1,486,106 = resnet50-16
-	  2,682,906 = resnet101-16
-	  2,801,450 = resnet18-32
-	  3,669,274 = resnet152-16
-	  4,196,826 = wide_resnet50_2-16
-	  5,132,826 = resnext101_64x4d-16
-	  5,330,346 = resnet34-32
-	  5,466,330 = resnext101_32x8d-16
-	  5,774,634 = resnext50_32x4d-32
-	  5,902,890 = resnet50-32
-	  7,835,098 = wide_resnet101_2-16
-	 10,663,978 = resnet101-32
-	 11,181,642 = resnet18-64         = resnet18
-	 14,586,410 = resnet152-32
-	 16,738,218 = wide_resnet50_2-32
-	 20,414,890 = resnext101_64x4d-32
-	 21,289,802 = resnet34-64         = resnet34
-	 21,748,906 = resnext101_32x8d-32
-	 23,000,394 = resnext50_32x4d-64  = resnext50_32x4d
-	 23,528,522 = resnet50-64         = resnet50
-	 31,256,490 = wide_resnet101_2-32
-	 42,520,650 = resnet101-64        = resnet101
-	 58,164,298 = resnet152-64        = resnet152
-	 66,854,730 = wide_resnet50_2-64  = wide_resnet50_2
-	 81,426,762 = resnext101_64x4d-64 = resnext101_64x4d
-	 86,762,826 = resnext101_32x8d-64 = resnext101_32x8d
-	124,858,186 = wide_resnet101_2-64 = wide_resnet101_2
+- ResNet (downscale /32):
+	 11,181,642 = resnet18
+	 21,289,802 = resnet34
+	 23,000,394 = resnext50_32x4d
+	 23,528,522 = resnet50
+	 42,520,650 = resnet101
+	 58,164,298 = resnet152
+	 66,854,730 = wide_resnet50_2
+	 81,426,762 = resnext101_64x4d
+	 86,762,826 = resnext101_32x8d
+	124,858,186 = wide_resnet101_2
 
-- ConvNeXt:
+- Wide ResNet (downscale /4):
+	 1,855,578 = wide2_resnet32_g3
+	 2,748,890 = wide4_resnet14_g3
+	 8,949,210 = wide4_resnet38_g3
+	10,961,370 = wide8_resnet14_g3
+	17,158,106 = wide8_resnet20_g3
+	36,479,194 = wide10_resnet26_g3
+	55,841,754 = wide10_resnet38_g3
+
+- Wide ResNet (downscale /8):
+	 11,144,154 = wide4_resnet18_g4
+	 36,227,034 = wide4_resnet50_g4
+	 44,529,114 = wide8_resnet18_g4
+	 53,268,954 = wide6_resnet34_g4
+	108,739,674 = wide10_resnet26_g4
+	119,754,714 = wide8_resnet42_g4
+
+- ConvNeXt (downscale /32):
 	 27,827,818 = convnext_tiny
 	 49,462,378 = convnext_small
 	 87,576,714 = convnext_base
 	196,245,706 = convnext_large
 
-- EfficientNet:
+- EfficientNet (downscale /32):
 	 20,190,298 = efficientnet_v2_s
 	 52,871,166 = efficientnet_v2_m
 	117,247,082 = efficientnet_v2_l
 
-- SqueezeNet:
+- SqueezeNet (downscale /16 plus extra no-padding losses):
 	727,626 = squeezenet1_1

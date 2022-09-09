@@ -34,31 +34,27 @@ class FCNet(nn.Module):
 	def forward(self, x):
 		return self.layers(x.view(x.shape[0], -1))
 
-# WideResNet classification network (version from original paper)
+# WideResNet classification network (generalisation of version from original paper, also correcting the counting of network depth)
 class WideResNet(nn.Module):
 
-	def __init__(self, num_classes, in_channels=3, depth=28, width=10, dropout_prob=0, act_func_factory=None):
+	def __init__(self, num_classes, in_channels=3, width=10, depth=26, groups=3, thickness=16, dropout_prob=0, act_func_factory=None):
 		super().__init__()
 		if act_func_factory is None:
 			act_func_factory = nn.ReLU
-		if (depth - 4) % 6 != 0:
-			raise ValueError("Depth must be of the format 6n+4 for integer n")
-		num_blocks = (depth - 4) // 6
-		widths = tuple(round(v * width) for v in (16, 32, 64))
-		self.conv0 = nn.Conv2d(in_channels=in_channels, out_channels=16, kernel_size=(3, 3), padding=1, bias=False)
-		self.group0 = self.create_group(in_channels=16, out_channels=widths[0], num_blocks=num_blocks, stride=1, dropout_prob=dropout_prob, act_func_factory=act_func_factory)
-		self.group1 = self.create_group(in_channels=widths[0], out_channels=widths[1], num_blocks=num_blocks, stride=2, dropout_prob=dropout_prob, act_func_factory=act_func_factory)
-		self.group2 = self.create_group(in_channels=widths[1], out_channels=widths[2], num_blocks=num_blocks, stride=2, dropout_prob=dropout_prob, act_func_factory=act_func_factory)
-		self.bn = nn.BatchNorm2d(num_features=widths[2], affine=True, track_running_stats=True)
+		num_blocks = (depth - 2) // (2 * groups)
+		if 2 * groups * num_blocks + 2 != depth:
+			raise ValueError(f"Depth must be of the format {2 * groups}B+2 for integer B")
+		widths = (thickness, *(thickness * width * 2 ** g for g in range(groups)))
+		self.conv0 = nn.Conv2d(in_channels=in_channels, out_channels=widths[0], kernel_size=(3, 3), padding=1, bias=False)
+		self.groups = nn.Sequential(*(self.create_group(in_channels=widths[g], out_channels=widths[g + 1], num_blocks=num_blocks, stride=1 if g == 0 else 2, dropout_prob=dropout_prob, act_func_factory=act_func_factory) for g in range(groups)))
+		self.bn = nn.BatchNorm2d(num_features=widths[-1], affine=True, track_running_stats=True)
 		self.act_func = act_func_factory(inplace=True)
 		self.pool = nn.AdaptiveAvgPool2d(output_size=(1, 1))
-		self.fc = nn.Linear(in_features=widths[2], out_features=num_classes, bias=True)
+		self.fc = nn.Linear(in_features=widths[-1], out_features=num_classes, bias=True)
 
 	def forward(self, x):
 		x = self.conv0(x)
-		x = self.group0(x)
-		x = self.group1(x)
-		x = self.group2(x)
+		x = self.groups(x)
 		x = self.act_func(self.bn(x))
 		x = self.pool(x)
 		x = self.fc(x.view(x.shape[0], -1))
