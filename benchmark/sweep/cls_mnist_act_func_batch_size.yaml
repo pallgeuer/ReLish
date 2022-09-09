@@ -10,7 +10,7 @@ parameters:
   act_func:
     values: ['relu', 'silu', 'mish']
   model:
-    value: resnet18-16
+    value: fcnet
   epochs:
     value: 50
   batch_size:
