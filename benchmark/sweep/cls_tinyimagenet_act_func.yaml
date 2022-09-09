@@ -1,0 +1,17 @@
+program: train_cls.py
+project: cls_tinyimagenet
+method: grid
+metric:
+  goal: minimize
+  name: valid_top1_max
+parameters:
+  dataset:
+    value: TinyImageNet
+  act_func:
+    values: ['elu', 'hardshrink', 'hardsigmoid', 'hardtanh', 'hardswish', 'leakyrelu-0.01', 'leakyrelu-0.05', 'leakyrelu-0.25', 'logsigmoid', 'prelu', 'relu', 'relu6', 'rrelu', 'selu', 'celu', 'gelu-exact', 'gelu-approx', 'sigmoid', 'silu', 'mish', 'softplus', 'softshrink', 'softsign', 'tanh', 'tanhshrink', 'threshold']
+  model:
+    value: wide6_resnet34_g4
+  epochs:
+    value: 120
+  batch_size:
+    value: 128
