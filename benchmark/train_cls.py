@@ -3,6 +3,7 @@
 
 # Imports
 import os
+import re
 import sys
 import math
 import timeit
@@ -94,7 +95,7 @@ def main():
 # Load the dataset
 def load_dataset(C):
 
-	tfrm_normalize_rgb = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+	tfrm_normalize_rgb = transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
 
 	if C.dataset in ('MNIST', 'FashionMNIST'):
 		num_classes = 10
@@ -192,11 +193,11 @@ def load_model(C, num_classes, in_shape, details=False):
 
 	model_type, _, model_variant = C.model.partition('-')
 
-	def model_variant_int(default):
+	def parse_model_variant(default):
 		if not model_variant:
 			return default
 		try:
-			return int(model_variant)
+			return type(default)(model_variant)
 		except ValueError:
 			raise ValueError(f"Invalid model variant: {model_variant}")
 
@@ -205,6 +206,7 @@ def load_model(C, num_classes, in_shape, details=False):
 	is_convnext = model_type in ('convnext_tiny', 'convnext_small', 'convnext_base', 'convnext_large')
 	is_efficientnet = model_type in ('efficientnet_v2_s', 'efficientnet_v2_m', 'efficientnet_v2_l')
 	is_squeezenet = model_type == 'squeezenet1_1'
+	is_wideresnet = model_type == 'wide_resnet28_10'
 
 	if C.act_func == 'original':
 		act_func_factory = act_func_class = None
@@ -214,20 +216,23 @@ def load_model(C, num_classes, in_shape, details=False):
 	in_channels = in_shape[0]
 
 	if is_fcnet:
-		model = models.FCNet(in_features=math.prod(in_shape), num_classes=num_classes, num_layers=model_variant_int(default=8), act_func_factory=act_func_factory)
+		model = models.FCNet(in_features=math.prod(in_shape), num_classes=num_classes, num_layers=parse_model_variant(default=8), act_func_factory=act_func_factory)
 	elif is_resnet or is_convnext or is_efficientnet or is_squeezenet:
 		model_factory = getattr(torchvision.models, model_type, None)
 		if model_factory is None or not model_type.islower() or model_type.startswith('_') or not callable(model_factory):
 			raise ValueError(f"Invalid torchvision model type: {model_type}")
 		model = model_factory(num_classes=num_classes)
+	elif is_wideresnet:
+		match = re.fullmatch(r'wide_resnet(\d+)_(\d+)', model_type)
+		model = models.WideResNet(num_classes=num_classes, in_channels=in_channels, depth=int(match.group(1)), width=int(match.group(2)), dropout_prob=parse_model_variant(default=0.0), act_func_factory=act_func_factory)
 	else:
 		raise ValueError(f"Invalid model type: {model_type}")
 
 	actions = []
-	if not is_fcnet:
+	if not is_fcnet and not is_wideresnet:
 		if is_resnet:
 			models.replace_conv2d_in_channels(model, 'conv1', in_channels=in_channels)
-			conv1_out_channels = model_variant_int(default=model.conv1.out_channels)
+			conv1_out_channels = parse_model_variant(default=model.conv1.out_channels)
 			if conv1_out_channels != model.conv1.out_channels:
 				model.apply(functools.partial(models.pending_scale_channels, actions=actions, factor=fractions.Fraction(conv1_out_channels, model.conv1.out_channels), skip_inputs=(model.conv1,), skip_outputs=(model.fc,)))
 		elif is_convnext or is_efficientnet:
