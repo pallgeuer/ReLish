@@ -134,14 +134,14 @@ TRAIN CLASSIFICATION MODEL
 - Train single classification model:
 	cd "$RELISH_DIR"/benchmark
 	conda activate $ENV
-	./train_cls.py --dataset MNIST
-	./train_cls.py --dataset FashionMNIST
-	./train_cls.py --dataset CIFAR10
-	./train_cls.py --dataset CIFAR100
-	./train_cls.py --dataset TinyImageNet
-	./train_cls.py --dataset Imagenette
-	./train_cls.py --dataset Imagewoof
-	./train_cls.py --dataset ImageNet1K
+	./train_cls.py --dataset MNIST --model fcnet
+	./train_cls.py --dataset FashionMNIST --model fcnet
+	./train_cls.py --dataset CIFAR10 --model wide4_resnet14_g3
+	./train_cls.py --dataset CIFAR100 --model wide10_resnet26_g3
+	./train_cls.py --dataset TinyImageNet --model wide6_resnet34_g4
+	./train_cls.py --dataset Imagenette --model resnet50
+	./train_cls.py --dataset Imagewoof --model resnet50
+	./train_cls.py --dataset ImageNet1K --model resnet101
 
 - Train classification model sweep:
 	cd "$RELISH_DIR"/benchmark
