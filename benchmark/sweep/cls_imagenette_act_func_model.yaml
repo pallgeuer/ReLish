@@ -6,11 +6,11 @@ metric:
   name: valid_top1_max
 parameters:
   dataset:
-    values: ['TinyImageNet', 'Imagenette', 'Imagewoof']
+    values: ['Imagenette', 'Imagewoof']
   act_func:
     values: ['relu', 'silu', 'mish']
   model:
-    values: ['resnet18-32', 'resnet34-32', 'resnext50_32x4d-32', 'resnet50-32', 'resnet101-32', 'resnet18', 'resnet152-32', 'wide_resnet50_2-32', 'resnext101_64x4d-32', 'resnet34', 'resnext50_32x4d', 'resnet50', 'wide_resnet101_2-32', 'resnet101']
+    values: ['resnet18', 'resnet34', 'resnext50_32x4d', 'resnet50', 'resnet101', 'resnet152', 'wide_resnet50_2', 'resnext101_64x4d', 'resnext101_32x8d', 'wide_resnet101_2', 'convnext_tiny', 'convnext_small', 'convnext_base', 'convnext_large', 'efficientnet_v2_s', 'efficientnet_v2_m', 'efficientnet_v2_l', 'squeezenet1_1']
   epochs:
     value: 120
   batch_size:
