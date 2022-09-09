@@ -62,10 +62,11 @@ Classification Models
 Note: Number of parameters is evaluated for CIFAR10
 
 - FCNet:
+	1,332,490 = fcnet-2
+	1,480,714 = fcnet-3 = fcnet
 	1,777,162 = fcnet-5
-	2,221,834 = fcnet-8  = fcnet
+	2,221,834 = fcnet-8
 	2,962,954 = fcnet-13
-	4,148,746 = fcnet-21
 
 - ResNet (downscale /32):
 	 11,181,642 = resnet18

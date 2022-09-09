@@ -216,7 +216,7 @@ def load_model(C, num_classes, in_shape, details=False):
 	in_channels = in_shape[0]
 
 	if is_fcnet:
-		model = models.FCNet(in_features=math.prod(in_shape), num_classes=num_classes, num_layers=parse_model_variant(default=8), act_func_factory=act_func_factory)
+		model = models.FCNet(in_features=math.prod(in_shape), num_classes=num_classes, num_layers=parse_model_variant(default=3), act_func_factory=act_func_factory)
 	elif is_resnet or is_convnext or is_efficientnet or is_squeezenet:
 		model_factory = getattr(torchvision.models, model_type, None)
 		if model_factory is None or not model_type.islower() or model_type.startswith('_') or not callable(model_factory):
