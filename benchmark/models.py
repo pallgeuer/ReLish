@@ -3,6 +3,7 @@
 # Import
 import fractions
 from typing import Union, Type, Tuple
+import torch
 import torch.nn as nn
 
 #
@@ -32,7 +33,7 @@ class FCNet(nn.Module):
 		)
 
 	def forward(self, x):
-		return self.layers(x.view(x.shape[0], -1))
+		return self.layers(torch.flatten(x, 1))
 
 # WideResNet classification network (generalisation of version from original paper, also correcting the counting of network depth)
 class WideResNet(nn.Module):
@@ -51,7 +52,7 @@ class WideResNet(nn.Module):
 		self.groups = nn.Sequential(*(self.create_group(in_channels=widths[g], out_channels=widths[g + 1], num_blocks=num_blocks, stride=1 if g == 0 else 2, dropout_prob=dropout_prob, act_func_factory=act_func_factory) for g in range(groups)))
 		self.bn = nn.BatchNorm2d(num_features=widths[-1], affine=True, track_running_stats=True)
 		self.act_func = act_func_factory(inplace=True)
-		self.pool = nn.AdaptiveAvgPool2d(output_size=(1, 1))
+		self.avgpool = nn.AdaptiveAvgPool2d(output_size=(1, 1))
 		self.fc = nn.Linear(in_features=widths[-1], out_features=num_classes, bias=True)
 
 		for m in self.modules():
@@ -65,8 +66,9 @@ class WideResNet(nn.Module):
 		x = self.conv0(x)
 		x = self.groups(x)
 		x = self.act_func(self.bn(x))
-		x = self.pool(x)
-		x = self.fc(x.view(x.shape[0], -1))
+		x = self.avgpool(x)
+		x = torch.flatten(x, 1)
+		x = self.fc(x)
 		return x
 
 	@classmethod
