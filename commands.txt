@@ -150,6 +150,19 @@ TRAIN CLASSIFICATION MODEL
 	wandb sweep sweep/cls_SWEEPNAME.yaml
 	<WANDB AGENT COMMAND FROM ABOVE OUTPUT>  # [--count NUM]
 
+- Train all classification model sweeps (excluding ImageNet1K):
+	cd "$RELISH_DIR"/benchmark
+	conda activate $ENV
+	export WANDB_DIR="$RELISH_DIR"/benchmark/log
+	for sweep in sweep/cls_{mnist,cifar10,cifar100,tinyimagenet,imagenette}_model.yaml; do wandb sweep "$sweep"; done
+	# --> Run all the wandb agent commands from the above
+	# --> Select a nominal model for each dataset and update all the dependent sweep files
+	for sweep in sweep/cls_{mnist,cifar10,cifar100,tinyimagenet,imagenette}_act_func.yaml; do wandb sweep "$sweep"; done
+	# --> Run all the wandb agent commands from the above
+	# --> Select a collection of activation functions that are all high performing and update all the dependent sweep files
+	for sweep in sweep/cls_{mnist,cifar10,cifar100,tinyimagenet,imagenette}_act_func_*.yaml; do wandb sweep "$sweep"; done
+	# --> Run all the wandb agent commands from the above
+
 CUSTOM WANDB CHARTS
 -------------------
 
