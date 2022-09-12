@@ -68,6 +68,13 @@ Note: Number of parameters is evaluated for CIFAR10
 	2,221,834 = fcnet-8
 	2,962,954 = fcnet-13
 
+- SqueezeNet:
+	727,626 = squeezenetp_d2  (downscale /2)
+	727,626 = squeezenetp_d4  (downscale /4)
+	727,626 = squeezenetp_d8  (downscale /8)
+	727,626 = squeezenetp_d16 (downscale /16)
+	727,626 = squeezenet1_1   (downscale /16 plus extra no-padding losses)
+
 - ResNet (downscale /32):
 	 11,181,642 = resnet18
 	 21,289,802 = resnet34
@@ -105,16 +112,13 @@ Note: Number of parameters is evaluated for CIFAR10
 	69,604,314 = wide8_resnet26_g4
 	67,375,194 = wide6_resnet42_g4
 
-- ConvNeXt (downscale /32):
-	 27,827,818 = convnext_tiny
-	 49,462,378 = convnext_small
-	 87,576,714 = convnext_base
-	196,245,706 = convnext_large
-
 - EfficientNet (downscale /32):
 	 20,190,298 = efficientnet_v2_s
 	 52,871,166 = efficientnet_v2_m
 	117,247,082 = efficientnet_v2_l
 
-- SqueezeNet (downscale /16 plus extra no-padding losses):
-	727,626 = squeezenet1_1
+- ConvNeXt (downscale /32):
+	 27,827,818 = convnext_tiny
+	 49,462,378 = convnext_small
+	 87,576,714 = convnext_base
+	196,245,706 = convnext_large

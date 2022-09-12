@@ -138,10 +138,10 @@ def pending_scale_channels(module, actions, factor: fractions.Fraction, skip_inp
 			scale_input = submodule not in skip_inputs
 			scale_output = submodule not in skip_outputs
 			if scale_input or scale_output:
-				replace_conv2d(module, attr_key, submodule, dict(
+				replace_conv2d(module, attr_key, dict(
 					in_channels=scale_by_factor(submodule.in_channels, factor) if scale_input else submodule.in_channels,
 					out_channels=scale_by_factor(submodule.out_channels, factor) if scale_output else submodule.out_channels,
-				), actions=actions)
+				), submodule=submodule, actions=actions)
 		elif submodule_class == nn.BatchNorm2d:
 			if submodule not in skip_inputs:
 				device, dtype = (submodule.weight.device, submodule.weight.dtype) if submodule.weight is not None else (submodule.running_mean.device, submodule.running_mean.dtype) if submodule.running_mean is not None else (None, None)
@@ -176,7 +176,9 @@ def pending_replace_act_func(module, actions, act_func_classes: Union[Type, Tupl
 				actions.append((replace_submodule, module, attr_key, factory, (), dict(inplace=getattr(submodule, 'inplace', False))))
 
 # Replace a nn.Conv2D with a new one (pending action if actions is provided)
-def replace_conv2d(module, attr_key, submodule, replace_kwargs, actions=None):
+def replace_conv2d(module, attr_key, replace_kwargs, submodule=None, actions=None):
+	if submodule is None:
+		submodule = getattr(module, attr_key)
 	factory_kwargs = dict(
 		in_channels=submodule.in_channels,
 		out_channels=submodule.out_channels,
@@ -196,11 +198,29 @@ def replace_conv2d(module, attr_key, submodule, replace_kwargs, actions=None):
 	else:
 		actions.append((replace_submodule, module, attr_key, type(submodule), (), factory_kwargs))
 
+# Replace a nn.MaxPool2d with a new one (pending action if actions is provided)
+def replace_maxpool2d(module, attr_key, replace_kwargs, submodule=None, actions=None):
+	if submodule is None:
+		submodule = getattr(module, attr_key)
+	factory_kwargs = dict(
+		kernel_size=submodule.kernel_size,
+		stride=submodule.stride,
+		padding=submodule.padding,
+		dilation=submodule.dilation,
+		return_indices=submodule.return_indices,
+		ceil_mode=submodule.ceil_mode,
+	)
+	factory_kwargs.update(replace_kwargs)
+	if actions is None:
+		replace_submodule(module, attr_key, type(submodule), (), factory_kwargs)
+	else:
+		actions.append((replace_submodule, module, attr_key, type(submodule), (), factory_kwargs))
+
 # Replace a nn.Conv2D with a new one that has an updated number of input channels (pending action if actions is provided)
 def replace_conv2d_in_channels(module, attr_key, in_channels, actions=None):
 	submodule = getattr(module, attr_key)
 	if submodule.in_channels != in_channels:
-		replace_conv2d(module, attr_key, submodule, dict(in_channels=in_channels), actions=actions)
+		replace_conv2d(module, attr_key, dict(in_channels=in_channels), submodule=submodule, actions=actions)
 
 # Replace a submodule with another new one
 def replace_submodule(module, attr_key, factory, factory_args, factory_kwargs):

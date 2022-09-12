@@ -202,9 +202,10 @@ def load_model(C, num_classes, in_shape, details=False):
 			raise ValueError(f"Invalid model variant: {model_variant}")
 
 	is_fcnet = model_type == 'fcnet'
+	is_squeezenetp = model_type in ('squeezenetp_d2', 'squeezenetp_d4', 'squeezenetp_d8', 'squeezenetp_d16')
+	is_squeezenet = model_type == 'squeezenet1_1'
 	is_resnet = model_type in ('resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152', 'resnext50_32x4d', 'resnext101_32x8d', 'resnext101_64x4d', 'wide_resnet50_2', 'wide_resnet101_2')
 	is_wideresnet = model_type in ('wide1_resnet14_g3', 'wide2_resnet14_g3', 'wide4_resnet14_g3', 'wide8_resnet14_g3', 'wide1_resnet20_g3', 'wide2_resnet20_g3', 'wide8_resnet20_g3', 'wide10_resnet26_g3', 'wide2_resnet32_g3', 'wide4_resnet38_g3', 'wide10_resnet38_g3', 'wide1_resnet18_g4', 'wide2_resnet18_g4', 'wide4_resnet18_g4', 'wide8_resnet18_g4', 'wide1_resnet26_g4', 'wide2_resnet26_g4', 'wide8_resnet26_g4', 'wide6_resnet34_g4', 'wide6_resnet42_g4', 'wide4_resnet50_g4')
-	is_squeezenet = model_type == 'squeezenet1_1'
 	is_efficientnet = model_type in ('efficientnet_v2_s', 'efficientnet_v2_m', 'efficientnet_v2_l')
 	is_convnext = model_type in ('convnext_tiny', 'convnext_small', 'convnext_base', 'convnext_large')
 
@@ -215,13 +216,15 @@ def load_model(C, num_classes, in_shape, details=False):
 		act_func_class = act_func_factory().__class__
 	in_channels = in_shape[0]
 
-	if is_fcnet:
-		model = models.FCNet(in_features=math.prod(in_shape), num_classes=num_classes, num_layers=parse_model_variant(default=3), act_func_factory=act_func_factory)
-	elif is_resnet or is_convnext or is_efficientnet or is_squeezenet:
+	if is_squeezenet or is_resnet or is_efficientnet or is_convnext:
 		model_factory = getattr(torchvision.models, model_type, None)
 		if model_factory is None or not model_type.islower() or model_type.startswith('_') or not callable(model_factory):
 			raise ValueError(f"Invalid torchvision model type: {model_type}")
 		model = model_factory(num_classes=num_classes)
+	elif is_fcnet:
+		model = models.FCNet(in_features=math.prod(in_shape), num_classes=num_classes, num_layers=parse_model_variant(default=3), act_func_factory=act_func_factory)
+	elif is_squeezenetp:
+		model = torchvision.models.SqueezeNet(version="1_1", num_classes=num_classes)
 	elif is_wideresnet:
 		match = re.fullmatch(r'wide(\d+)_resnet(\d+)_g(\d+)', model_type)
 		model = models.WideResNet(num_classes=num_classes, in_channels=in_channels, width=int(match.group(1)), depth=int(match.group(2)), groups=int(match.group(3)), thickness=parse_model_variant(default=16), act_func_factory=act_func_factory)
@@ -230,15 +233,29 @@ def load_model(C, num_classes, in_shape, details=False):
 
 	actions = []
 	if not is_fcnet and not is_wideresnet:
-		if is_resnet:
+		if is_squeezenetp:  # Version of squeezenet1_1 with customisable maximum downscale (/2, /4, /8, /16) and with each downscale padded to be exactly a factor of 2
+			match = re.fullmatch(r'squeezenetp_d(\d+)', model_type)
+			downscale = int(match.group(1))
+			models.replace_conv2d(model.features, '0', dict(in_channels=in_channels, stride=(2, 2) if downscale >= 16 else (1, 1), padding=(1, 1)))
+			if downscale >= 8:
+				models.replace_maxpool2d(model.features, '2', dict(padding=1, ceil_mode=False))
+			else:
+				models.replace_submodule(model.features, '2', models.Identity, (), {})
+			if downscale >= 4:
+				models.replace_maxpool2d(model.features, '5', dict(padding=1, ceil_mode=False))
+			else:
+				models.replace_submodule(model.features, '5', models.Identity, (), {})
+			models.replace_maxpool2d(model.features, '8', dict(padding=1, ceil_mode=False))
+			models.replace_submodule(model.classifier, '2', models.Identity, (), {})
+		elif is_squeezenet:
+			models.replace_conv2d_in_channels(model.features, '0', in_channels=in_channels)
+			models.replace_submodule(model.classifier, '2', models.Identity, (), {})  # Note: Solves dying ReLU problem that leads to untrainable network (a ReLU after the last convolution often leads to permanently zero output after a few epochs, especially if there are lots of classes in the dataset)
+		elif is_resnet:
 			models.replace_conv2d_in_channels(model, 'conv1', in_channels=in_channels)
 			conv1_out_channels = parse_model_variant(default=model.conv1.out_channels)
 			if conv1_out_channels != model.conv1.out_channels:
 				model.apply(functools.partial(models.pending_scale_channels, actions=actions, factor=fractions.Fraction(conv1_out_channels, model.conv1.out_channels), skip_inputs=(model.conv1,), skip_outputs=(model.fc,)))
-		elif is_squeezenet:
-			models.replace_conv2d_in_channels(model.features, '0', in_channels=in_channels)
-			models.replace_submodule(model.classifier, '2', models.Identity, (), {})  # Note: Solves dying ReLU problem that leads to untrainable network (a ReLU after the last convolution often leads to permanently zero output after a few epochs, especially if there are lots of classes in the dataset)
-		elif is_convnext or is_efficientnet:
+		elif is_efficientnet or is_convnext:
 			models.replace_conv2d_in_channels(model.features[0], '0', in_channels=in_channels)
 			if is_efficientnet and model.features[1][0].stochastic_depth.p == 0.0:
 				models.replace_submodule(model.features[1][0], 'stochastic_depth', models.Clone, (), {})  # Note: Solves autograd error when using ReLU (ReLU saves output tensor for backward pass, which is modified in-place by '+=' if stochastic depth has p = 0, which the very first stochastic depth does)

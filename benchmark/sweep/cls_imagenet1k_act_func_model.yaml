@@ -10,7 +10,7 @@ parameters:
   act_func:
     values: ['relu', 'silu', 'mish']
   model:
-    values: ['resnet18', 'resnet34', 'resnext50_32x4d', 'resnet50', 'resnet101', 'resnet152', 'wide_resnet50_2', 'resnext101_64x4d', 'resnext101_32x8d', 'wide_resnet101_2', 'convnext_tiny', 'convnext_small', 'convnext_base', 'convnext_large', 'efficientnet_v2_s', 'efficientnet_v2_m', 'efficientnet_v2_l', 'squeezenet1_1']
+    values: ['squeezenetp_d16', 'squeezenet1_1', 'resnet18', 'resnet34', 'resnext50_32x4d', 'resnet50', 'resnet101', 'resnet152', 'wide_resnet50_2', 'resnext101_64x4d', 'resnext101_32x8d', 'wide_resnet101_2', 'efficientnet_v2_s', 'efficientnet_v2_m', 'efficientnet_v2_l', 'convnext_tiny', 'convnext_small', 'convnext_base', 'convnext_large']
   epochs:
     value: 80
   batch_size:

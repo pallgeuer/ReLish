@@ -10,7 +10,7 @@ parameters:
   act_func:
     values: ['relu', 'silu', 'mish']
   model:
-    values: ['wide1_resnet14_g3', 'wide1_resnet20_g3', 'wide2_resnet14_g3', 'wide2_resnet20_g3', 'wide2_resnet32_g3', 'wide4_resnet14_g3', 'wide4_resnet38_g3', 'wide8_resnet14_g3', 'wide8_resnet20_g3', 'wide10_resnet26_g3', 'wide10_resnet38_g3']
+    values: ['squeezenetp_d2', 'squeezenetp_d4', 'wide1_resnet14_g3', 'wide1_resnet20_g3', 'wide2_resnet14_g3', 'wide2_resnet20_g3', 'wide2_resnet32_g3', 'wide4_resnet14_g3', 'wide4_resnet38_g3', 'wide8_resnet14_g3', 'wide8_resnet20_g3', 'wide10_resnet26_g3', 'wide10_resnet38_g3']
   epochs:
     value: 120
   batch_size:
