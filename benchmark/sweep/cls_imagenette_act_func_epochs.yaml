@@ -14,4 +14,4 @@ parameters:
   epochs:
     values: [50, 80, 120, 180]
   batch_size:
-    value: 64
+    value: 32

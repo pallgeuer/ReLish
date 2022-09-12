@@ -10,8 +10,8 @@ parameters:
   act_func:
     value: original
   model:
-    values: ['wide4_resnet18_g4', 'wide4_resnet50_g4', 'wide8_resnet18_g4', 'wide6_resnet34_g4', 'wide10_resnet26_g4', 'wide8_resnet42_g4']
+    values: ['wide1_resnet18_g4', 'wide1_resnet26_g4', 'wide2_resnet18_g4', 'wide2_resnet26_g4', 'wide4_resnet18_g4', 'wide4_resnet50_g4', 'wide8_resnet18_g4', 'wide6_resnet34_g4', 'wide8_resnet26_g4', 'wide6_resnet42_g4']
   epochs:
     value: 120
   batch_size:
-    value: 128
+    value: 64

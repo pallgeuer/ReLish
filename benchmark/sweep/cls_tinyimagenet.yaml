@@ -10,7 +10,7 @@ parameters:
   act_func:
     values: ['elu', 'hardshrink', 'hardsigmoid', 'hardtanh', 'hardswish', 'leakyrelu-0.01', 'leakyrelu-0.05', 'leakyrelu-0.25', 'logsigmoid', 'prelu', 'relu', 'relu6', 'rrelu', 'selu', 'celu', 'gelu-exact', 'gelu-approx', 'sigmoid', 'silu', 'mish', 'softplus', 'softshrink', 'softsign', 'tanh', 'tanhshrink', 'threshold']
   model:
-    values: ['wide4_resnet18_g4', 'wide4_resnet50_g4', 'wide8_resnet18_g4', 'wide6_resnet34_g4', 'wide10_resnet26_g4', 'wide8_resnet42_g4']
+    values: ['wide1_resnet18_g4', 'wide1_resnet26_g4', 'wide2_resnet18_g4', 'wide2_resnet26_g4', 'wide4_resnet18_g4', 'wide4_resnet50_g4', 'wide8_resnet18_g4', 'wide6_resnet34_g4', 'wide8_resnet26_g4', 'wide6_resnet42_g4']
   epochs:
     values: [50, 80, 120, 180]
   batch_size:

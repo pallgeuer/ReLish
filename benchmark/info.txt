@@ -81,6 +81,10 @@ Note: Number of parameters is evaluated for CIFAR10
 	124,858,186 = wide_resnet101_2
 
 - Wide ResNet (downscale /4):
+	   175,066 = wide1_resnet14_g3
+	   272,282 = wide1_resnet20_g3
+	   691,674 = wide2_resnet14_g3
+	 1,079,642 = wide2_resnet20_g3
 	 1,855,578 = wide2_resnet32_g3
 	 2,748,890 = wide4_resnet14_g3
 	 8,949,210 = wide4_resnet38_g3
@@ -90,12 +94,16 @@ Note: Number of parameters is evaluated for CIFAR10
 	55,841,754 = wide10_resnet38_g3
 
 - Wide ResNet (downscale /8):
-	 11,144,154 = wide4_resnet18_g4
-	 36,227,034 = wide4_resnet50_g4
-	 44,529,114 = wide8_resnet18_g4
-	 53,268,954 = wide6_resnet34_g4
-	108,739,674 = wide10_resnet26_g4
-	119,754,714 = wide8_resnet42_g4
+	   701,018 = wide1_resnet18_g4
+	 1,093,658 = wide1_resnet26_g4
+	 2,792,154 = wide2_resnet18_g4
+	 4,360,794 = wide2_resnet26_g4
+	11,144,154 = wide4_resnet18_g4
+	36,227,034 = wide4_resnet50_g4
+	44,529,114 = wide8_resnet18_g4
+	53,268,954 = wide6_resnet34_g4
+	69,604,314 = wide8_resnet26_g4
+	67,375,194 = wide6_resnet42_g4
 
 - ConvNeXt (downscale /32):
 	 27,827,818 = convnext_tiny

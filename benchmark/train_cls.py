@@ -203,7 +203,7 @@ def load_model(C, num_classes, in_shape, details=False):
 
 	is_fcnet = model_type == 'fcnet'
 	is_resnet = model_type in ('resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152', 'resnext50_32x4d', 'resnext101_32x8d', 'resnext101_64x4d', 'wide_resnet50_2', 'wide_resnet101_2')
-	is_wideresnet = model_type in ('wide4_resnet14_g3', 'wide8_resnet14_g3', 'wide8_resnet20_g3', 'wide10_resnet26_g3', 'wide2_resnet32_g3', 'wide4_resnet38_g3', 'wide10_resnet38_g3', 'wide4_resnet18_g4', 'wide8_resnet18_g4', 'wide10_resnet26_g4', 'wide6_resnet34_g4', 'wide8_resnet42_g4', 'wide4_resnet50_g4')
+	is_wideresnet = model_type in ('wide1_resnet14_g3', 'wide2_resnet14_g3', 'wide4_resnet14_g3', 'wide8_resnet14_g3', 'wide1_resnet20_g3', 'wide2_resnet20_g3', 'wide8_resnet20_g3', 'wide10_resnet26_g3', 'wide2_resnet32_g3', 'wide4_resnet38_g3', 'wide10_resnet38_g3', 'wide1_resnet18_g4', 'wide2_resnet18_g4', 'wide4_resnet18_g4', 'wide8_resnet18_g4', 'wide1_resnet26_g4', 'wide2_resnet26_g4', 'wide8_resnet26_g4', 'wide6_resnet34_g4', 'wide6_resnet42_g4', 'wide4_resnet50_g4')
 	is_squeezenet = model_type == 'squeezenet1_1'
 	is_efficientnet = model_type in ('efficientnet_v2_s', 'efficientnet_v2_m', 'efficientnet_v2_l')
 	is_convnext = model_type in ('convnext_tiny', 'convnext_small', 'convnext_base', 'convnext_large')
