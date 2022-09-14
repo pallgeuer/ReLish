@@ -198,23 +198,27 @@ def replace_conv2d(module, attr_key, replace_kwargs, submodule=None, actions=Non
 	else:
 		actions.append((replace_submodule, module, attr_key, type(submodule), (), factory_kwargs))
 
-# Replace a nn.MaxPool2d with a new one (pending action if actions is provided)
-def replace_maxpool2d(module, attr_key, replace_kwargs, submodule=None, actions=None):
-	if submodule is None:
-		submodule = getattr(module, attr_key)
-	factory_kwargs = dict(
-		kernel_size=submodule.kernel_size,
-		stride=submodule.stride,
-		padding=submodule.padding,
-		dilation=submodule.dilation,
-		return_indices=submodule.return_indices,
-		ceil_mode=submodule.ceil_mode,
-	)
-	factory_kwargs.update(replace_kwargs)
-	if actions is None:
-		replace_submodule(module, attr_key, type(submodule), (), factory_kwargs)
+# Replace a nn.MaxPool2d with a new one or identity (pending action if actions is provided)
+def replace_maxpool2d(module, attr_key, replace_kwargs, identity=False, submodule=None, actions=None):
+	if identity:
+		action = (replace_submodule, module, attr_key, Identity, (), {})
 	else:
-		actions.append((replace_submodule, module, attr_key, type(submodule), (), factory_kwargs))
+		if submodule is None:
+			submodule = getattr(module, attr_key)
+		factory_kwargs = dict(
+			kernel_size=submodule.kernel_size,
+			stride=submodule.stride,
+			padding=submodule.padding,
+			dilation=submodule.dilation,
+			return_indices=submodule.return_indices,
+			ceil_mode=submodule.ceil_mode,
+		)
+		factory_kwargs.update(replace_kwargs)
+		action = (replace_submodule, module, attr_key, type(submodule), (), factory_kwargs)
+	if actions is None:
+		action[0](*action[1:])
+	else:
+		actions.append(action)
 
 # Replace a nn.Conv2D with a new one that has an updated number of input channels (pending action if actions is provided)
 def replace_conv2d_in_channels(module, attr_key, in_channels, actions=None):
