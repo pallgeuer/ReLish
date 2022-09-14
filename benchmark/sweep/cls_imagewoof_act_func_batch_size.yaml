@@ -1,17 +1,17 @@
 program: train_cls.py
-project: cls_imagenette
+project: cls_imagewoof
 method: grid
 metric:
   goal: minimize
   name: valid_top1_max
 parameters:
   dataset:
-    value: Imagenette
+    value: Imagewoof
   act_func:
     values: ['relu', 'silu', 'mish']
   model:
     value: resnet50
   epochs:
-    values: [50, 80, 120, 180]
+    value: 120
   batch_size:
-    value: 32
+    values: [16, 32, 64, 128]

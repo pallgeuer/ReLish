@@ -6,7 +6,7 @@ metric:
   name: valid_top1_max
 parameters:
   dataset:
-    values: ['Imagenette', 'Imagewoof']
+    value: Imagenette
   act_func:
     value: original
   model:
