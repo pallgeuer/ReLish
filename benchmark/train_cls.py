@@ -32,7 +32,7 @@ def main():
 	parser.add_argument('--wandb_name', type=str, default=None, metavar='NAME', help='Wandb run name')
 	parser.add_argument('--dataset', type=str, default='CIFAR10', metavar='NAME', help='Classification dataset to train on (default: %(default)s)')
 	parser.add_argument('--dataset_path', type=str, default=None, metavar='PATH', help='Classification dataset root path (default: ENV{DATASET_PATH} or ~/Datasets)')
-	parser.add_argument('--dataset_workers', type=int, default=2, metavar='NUM', help='Number of worker processes to use for dataset loading (default: %(default)d)')
+	parser.add_argument('--dataset_workers', type=int, default=4, metavar='NUM', help='Number of worker processes to use for dataset loading (default: %(default)d)')
 	parser.add_argument('--model', type=str, default='resnet18', metavar='MODEL', help='Classification model (default: %(default)s)')
 	parser.add_argument('--model_details', action='store_true', help='Whether to show model details')
 	parser.add_argument('--act_func', type=str, default='original', metavar='NAME', help='Activation function (default: %(default)s)')
@@ -182,8 +182,9 @@ def load_dataset(C):
 	else:
 		raise ValueError(f"Invalid dataset specification: {C.dataset}")
 
-	train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=C.batch_size, num_workers=C.dataset_workers, shuffle=True, pin_memory=True)
-	valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=C.batch_size, num_workers=C.dataset_workers, shuffle=False, pin_memory=True)
+	dataset_workers = min(C.dataset_workers, C.batch_size)
+	train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=C.batch_size, num_workers=dataset_workers, shuffle=True, pin_memory=True)
+	valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=C.batch_size, num_workers=dataset_workers, shuffle=False, pin_memory=True)
 
 	return train_loader, valid_loader, num_classes, in_shape
 
