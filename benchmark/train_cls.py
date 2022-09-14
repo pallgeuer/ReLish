@@ -207,6 +207,8 @@ def load_model(C, num_classes, in_shape, details=False):
 	is_wideresnet = model_type in ('wide1_resnet14_g3', 'wide2_resnet14_g3', 'wide4_resnet14_g3', 'wide8_resnet14_g3', 'wide1_resnet20_g3', 'wide2_resnet20_g3', 'wide8_resnet20_g3', 'wide10_resnet26_g3', 'wide2_resnet32_g3', 'wide4_resnet38_g3', 'wide10_resnet38_g3', 'wide1_resnet18_g4', 'wide2_resnet18_g4', 'wide4_resnet18_g4', 'wide8_resnet18_g4', 'wide1_resnet26_g4', 'wide2_resnet26_g4', 'wide8_resnet26_g4', 'wide6_resnet34_g4', 'wide6_resnet42_g4', 'wide4_resnet50_g4')
 	is_efficientnet = model_type in ('efficientnet_v2_s', 'efficientnet_v2_m', 'efficientnet_v2_l')
 	is_convnext = model_type in ('convnext_tiny', 'convnext_small', 'convnext_base', 'convnext_large')
+	is_vit = model_type in ('vit_b_16', 'vit_b_32', 'vit_l_16', 'vit_l_32', 'vit_h_14')
+	is_swin = model_type in ('swin_t', 'swin_s', 'swin_b', 'swin_l')
 
 	if C.act_func == 'original':
 		act_func_factory = act_func_class = None
@@ -215,10 +217,10 @@ def load_model(C, num_classes, in_shape, details=False):
 		act_func_class = act_func_factory().__class__
 	in_channels = in_shape[0]
 
-	if is_squeezenet or is_resnet or is_efficientnet or is_convnext:
-		model_factory = getattr(torchvision.models, model_type, None)
+	if is_squeezenet or is_resnet or is_efficientnet or is_convnext or is_vit or is_swin:
+		model_factory = getattr(torchvision.models, model_type, getattr(models, model_type, None))
 		if model_factory is None or not model_type.islower() or model_type.startswith('_') or not callable(model_factory):
-			raise ValueError(f"Invalid torchvision model type: {model_type}")
+			raise ValueError(f"Invalid torchvision/models model type: {model_type}")
 		model = model_factory(num_classes=num_classes)
 	elif is_fcnet:
 		model = models.FCNet(in_features=math.prod(in_shape), num_classes=num_classes, num_layers=parse_model_variant(default=3), act_func_factory=act_func_factory)
@@ -254,10 +256,12 @@ def load_model(C, num_classes, in_shape, details=False):
 					model.layer3[0].apply(destride_func)
 				if downscale < 2:
 					model.layer4[0].apply(destride_func)
-		elif is_efficientnet or is_convnext:
+		elif is_efficientnet or is_convnext or is_swin:
 			models.replace_conv2d(model.features[0], '0', dict(in_channels=in_channels))
 			if is_efficientnet and model.features[1][0].stochastic_depth.p == 0.0:
 				models.replace_submodule(model.features[1][0], 'stochastic_depth', models.Clone, (), {})  # Note: Solves autograd error when using ReLU (ReLU saves output tensor for backward pass, which is modified in-place by '+=' if stochastic depth has p = 0, which the very first stochastic depth does)
+		elif is_vit:
+			models.replace_conv2d(model, 'conv_proj', dict(in_channels=in_channels))
 		else:
 			raise ValueError(f"Invalid model type: {model_type}")
 		if act_func_factory:  # Note: EfficientNet keeps its sigmoid activation scalers

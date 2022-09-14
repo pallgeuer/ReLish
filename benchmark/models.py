@@ -5,6 +5,7 @@ import fractions
 from typing import Union, Type, Tuple
 import torch
 import torch.nn as nn
+import torchvision.models
 
 #
 # Classification models
@@ -100,6 +101,21 @@ class WideResNet(nn.Module):
 				return o + self.convdim(y)
 			else:
 				return o + x
+
+# Swin Transformer large model
+def swin_l(**kwargs):
+	# noinspection PyProtectedMember
+	return torchvision.models.swin_transformer._swin_transformer(
+		patch_size=[4, 4],
+		embed_dim=192,
+		depths=[2, 2, 18, 2],
+		num_heads=[6, 12, 24, 48],
+		window_size=[7, 7],
+		stochastic_depth_prob=0.5,
+		weights=None,
+		progress=True,
+		**kwargs,
+	)
 
 #
 # Modules
