@@ -100,21 +100,26 @@ def load_dataset(C):
 		num_classes = 10
 		in_shape = (1, 28, 28)
 		if C.dataset == 'MNIST':
-			tfrm = transforms.Compose([
+			train_tfrm = valid_tfrm = transforms.Compose([
 				transforms.ToTensor(),
 				transforms.Normalize(mean=(0.1307,), std=(0.3081,)),
 			])
 		elif C.dataset == 'FashionMNIST':
-			tfrm = transforms.Compose([
-				transforms.RandomHorizontalFlip(),
+			valid_tfrm = transforms.Compose([
 				transforms.ToTensor(),
 				transforms.Normalize(mean=(0.2860,), std=(0.3530,)),
+			])
+			train_tfrm = transforms.Compose([
+				transforms.RandomHorizontalFlip(),
+				transforms.RandomCrop(size=28, padding=4),
+				*valid_tfrm.transforms,
+				transforms.RandomErasing(inplace=True),
 			])
 		else:
 			raise AssertionError
 		dataset_class = getattr(torchvision.datasets, C.dataset)
-		train_dataset = dataset_class(root=C.dataset_path, train=True, transform=tfrm)
-		valid_dataset = dataset_class(root=C.dataset_path, train=False, transform=tfrm)
+		train_dataset = dataset_class(root=C.dataset_path, train=True, transform=train_tfrm)
+		valid_dataset = dataset_class(root=C.dataset_path, train=False, transform=valid_tfrm)
 
 	elif C.dataset in ('CIFAR10', 'CIFAR100'):
 		num_classes = int(C.dataset[5:])
