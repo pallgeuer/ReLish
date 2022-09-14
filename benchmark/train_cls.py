@@ -240,12 +240,12 @@ def load_model(C, num_classes, in_shape, details=False):
 			models.replace_maxpool2d(model.features, '8', dict(padding=1, ceil_mode=False), identity=downscale < 2)
 			models.replace_submodule(model.classifier, '2', models.Identity, (), {})  # Note: Remove dying ReLU (a ReLU after the last convolution often leads to permanently zero output after a few epochs, especially if there are lots of classes in the dataset)
 		elif is_squeezenet:
-			models.replace_conv2d_in_channels(model.features, '0', in_channels=in_channels)
+			models.replace_conv2d(model.features, '0', dict(in_channels=in_channels))
 			models.replace_submodule(model.classifier, '2', models.Identity, (), {})  # Note: Remove dying ReLU (a ReLU after the last convolution often leads to permanently zero output after a few epochs, especially if there are lots of classes in the dataset)
 		elif is_resnet:
-			models.replace_conv2d_in_channels(model, 'conv1', in_channels=in_channels)
+			models.replace_conv2d(model, 'conv1', dict(in_channels=in_channels))
 		elif is_efficientnet or is_convnext:
-			models.replace_conv2d_in_channels(model.features[0], '0', in_channels=in_channels)
+			models.replace_conv2d(model.features[0], '0', dict(in_channels=in_channels))
 			if is_efficientnet and model.features[1][0].stochastic_depth.p == 0.0:
 				models.replace_submodule(model.features[1][0], 'stochastic_depth', models.Clone, (), {})  # Note: Solves autograd error when using ReLU (ReLU saves output tensor for backward pass, which is modified in-place by '+=' if stochastic depth has p = 0, which the very first stochastic depth does)
 		else:
