@@ -130,6 +130,7 @@ TRAIN CLASSIFICATION MODEL
 	ENV=relish
 	RELISH_DIR=~/Code/ReLish
 	export DATASET_PATH=~/Datasets
+	# export CUDA_VISIBLE_DEVICES=1
 
 - Train single classification model:
 	cd "$RELISH_DIR"/benchmark
