@@ -217,7 +217,7 @@ def load_model(C, num_classes, in_shape, details=False):
 		act_func_class = act_func_factory().__class__
 	in_channels = in_shape[0]
 
-	if is_squeezenet or is_resnet or is_efficientnet or is_convnext or is_vit or is_swin:
+	if is_squeezenet or is_resnet or is_efficientnet or is_convnext or is_swin or is_vit:
 		model_factory = getattr(torchvision.models, model_type, getattr(models, model_type, None))
 		if model_factory is None or not model_type.islower() or model_type.startswith('_') or not callable(model_factory):
 			raise ValueError(f"Invalid torchvision/models model type: {model_type}")

@@ -120,15 +120,15 @@ Note: Number of parameters is evaluated for CIFAR10 (3 input channels, 10 output
 	 87,576,714 = convnext_base
 	196,245,706 = convnext_large
 
+- Swin Transformer (downscale /32):
+	 27,527,044 = swin_t
+	 48,844,948 = swin_s
+	 86,753,474 = swin_b
+	195,010,846 = swin_l
+
 - Vision Transformer:
 	 85,806,346 = vit_b_16 (16x16 patches)
 	 87,462,922 = vit_b_32 (32x32 patches)
 	303,311,882 = vit_l_16 (16x16 patches)
 	305,520,650 = vit_l_32 (32x32 patches)
 	630,777,610 = vit_h_14 (14x14 patches)
-
-- Swin Transformer (downscale /32):
-	 27,527,044 = swin_t
-	 48,844,948 = swin_s
-	 86,753,474 = swin_b
-	195,010,846 = swin_l
