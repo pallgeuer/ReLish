@@ -33,6 +33,7 @@ def main():
 	parser.add_argument('--dataset', type=str, default='CIFAR10', metavar='NAME', help='Classification dataset to train on (default: %(default)s)')
 	parser.add_argument('--dataset_path', type=str, default=None, metavar='PATH', help='Classification dataset root path (default: ENV{DATASET_PATH} or ~/Datasets)')
 	parser.add_argument('--dataset_workers', type=int, default=4, metavar='NUM', help='Number of worker processes to use for dataset loading (default: %(default)d)')
+	parser.add_argument('--no_auto_augment', dest='auto_augment', action='store_false', help='Disable the AutoAugment input data transform (where present)')
 	parser.add_argument('--model', type=str, default='resnet18', metavar='MODEL', help='Classification model (default: %(default)s)')
 	parser.add_argument('--model_details', action='store_true', help='Whether to show model details')
 	parser.add_argument('--act_func', type=str, default='original', metavar='NAME', help='Activation function (default: %(default)s)')
@@ -124,15 +125,16 @@ def load_dataset(C):
 	elif C.dataset in ('CIFAR10', 'CIFAR100'):
 		num_classes = int(C.dataset[5:])
 		in_shape = (3, 32, 32)
-		train_tfrm = transforms.Compose([
-			transforms.RandomCrop(size=32, padding=4),
-			transforms.RandomHorizontalFlip(),
-			transforms.ToTensor(),
-			tfrm_normalize_rgb,
-		])
 		valid_tfrm = transforms.Compose([
 			transforms.ToTensor(),
 			tfrm_normalize_rgb,
+		])
+		train_tfrm = transforms.Compose([
+			transforms.RandomHorizontalFlip(),
+			transforms.RandomCrop(size=32, padding=4),
+			*((transforms.AutoAugment(transforms.AutoAugmentPolicy.CIFAR10),) if C.auto_augment else ()),
+			*valid_tfrm.transforms,
+			transforms.RandomErasing(inplace=True),
 		])
 		dataset_class = getattr(torchvision.datasets, C.dataset)
 		folder_path = os.path.join(C.dataset_path, 'CIFAR')
