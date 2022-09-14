@@ -243,7 +243,17 @@ def load_model(C, num_classes, in_shape, details=False):
 			models.replace_conv2d(model.features, '0', dict(in_channels=in_channels))
 			models.replace_submodule(model.classifier, '2', models.Identity, (), {})  # Note: Remove dying ReLU (a ReLU after the last convolution often leads to permanently zero output after a few epochs, especially if there are lots of classes in the dataset)
 		elif is_resnet:
-			models.replace_conv2d(model, 'conv1', dict(in_channels=in_channels))
+			downscale = parse_model_variant(default=32)
+			models.replace_conv2d(model, 'conv1', dict(in_channels=in_channels, stride=(1, 1) if downscale < 32 else (2, 2)))
+			if downscale < 16:
+				models.replace_submodule(model, 'maxpool', models.Identity, (), {})
+			if downscale < 8:
+				destride_func = functools.partial(models.pending_destride, actions=actions)
+				model.layer2[0].apply(destride_func)
+				if downscale < 4:
+					model.layer3[0].apply(destride_func)
+				if downscale < 2:
+					model.layer4[0].apply(destride_func)
 		elif is_efficientnet or is_convnext:
 			models.replace_conv2d(model.features[0], '0', dict(in_channels=in_channels))
 			if is_efficientnet and model.features[1][0].stochastic_depth.p == 0.0:

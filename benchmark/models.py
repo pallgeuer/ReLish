@@ -166,6 +166,15 @@ def pending_scale_channels(module, actions, factor: fractions.Fraction, skip_inp
 					dtype=submodule.weight.dtype,
 				)))
 
+# Enqueue pending actions to change the stride of all convolutions to (1, 1)
+def pending_destride(module, actions):
+	# noinspection PyProtectedMember
+	for attr_key in module._modules.keys():
+		submodule = getattr(module, attr_key)
+		submodule_class = type(submodule)
+		if submodule_class == nn.Conv2d and submodule.stride != (1, 1):
+			replace_conv2d(module, attr_key, dict(stride=(1, 1)), submodule, actions=actions)
+
 # Enqueue pending actions to replace certain activation functions with another activation function type
 def pending_replace_act_func(module, actions, act_func_classes: Union[Type, Tuple[Type, ...]], factory, klass):
 	# noinspection PyProtectedMember
@@ -181,9 +190,9 @@ def replace_module(module, attr_key, factory_kwargs, replace_kwargs, submodule, 
 	kwargs.update(replace_kwargs)
 	if kwargs != factory_kwargs:
 		if actions is None:
-			replace_submodule(module, attr_key, type(submodule), (), factory_kwargs)
+			replace_submodule(module, attr_key, type(submodule), (), kwargs)
 		else:
-			actions.append((replace_submodule, module, attr_key, type(submodule), (), factory_kwargs))
+			actions.append((replace_submodule, module, attr_key, type(submodule), (), kwargs))
 
 # Replace a nn.Conv2D with a new one (pending action if actions is provided)
 def replace_conv2d(module, attr_key, replace_kwargs, submodule=None, actions=None):
