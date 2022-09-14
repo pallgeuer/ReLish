@@ -144,15 +144,16 @@ def load_dataset(C):
 	elif C.dataset == 'TinyImageNet':
 		num_classes = 200
 		in_shape = (3, 64, 64)
-		train_tfrm = transforms.Compose([
-			transforms.RandomCrop(size=64, padding=8),
-			transforms.RandomHorizontalFlip(),
-			transforms.ToTensor(),
-			tfrm_normalize_rgb,
-		])
 		valid_tfrm = transforms.Compose([
 			transforms.ToTensor(),
 			tfrm_normalize_rgb,
+		])
+		train_tfrm = transforms.Compose([
+			transforms.RandomHorizontalFlip(),
+			transforms.RandomCrop(size=64, padding=8),
+			*((transforms.AutoAugment(transforms.AutoAugmentPolicy.CIFAR10),) if C.auto_augment else ()),  # TODO: None or CIFAR10 or IMAGENET?
+			*valid_tfrm.transforms,
+			transforms.RandomErasing(inplace=True),
 		])
 		folder_path = os.path.join(C.dataset_path, C.dataset, 'tiny-imagenet-200')
 		train_dataset = torchvision.datasets.ImageFolder(root=os.path.join(folder_path, 'train'), transform=train_tfrm)
@@ -174,6 +175,7 @@ def load_dataset(C):
 		train_tfrm = transforms.Compose([
 			transforms.RandomResizedCrop(size=224),
 			transforms.RandomHorizontalFlip(),
+			*((transforms.AutoAugment(transforms.AutoAugmentPolicy.IMAGENET),) if C.auto_augment else ()),  # TODO: None or IMAGENET
 			transforms.ToTensor(),
 			tfrm_normalize_rgb,
 		])
