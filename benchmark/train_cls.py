@@ -8,7 +8,6 @@ import sys
 import math
 import timeit
 import argparse
-import fractions
 import functools
 import contextlib
 import torch
@@ -227,7 +226,7 @@ def load_model(C, num_classes, in_shape, details=False):
 		model = torchvision.models.SqueezeNet(version="1_1", num_classes=num_classes)
 	elif is_wideresnet:
 		match = re.fullmatch(r'wide(\d+)_resnet(\d+)_g(\d+)', model_type)
-		model = models.WideResNet(num_classes=num_classes, in_channels=in_channels, width=int(match.group(1)), depth=int(match.group(2)), groups=int(match.group(3)), thickness=parse_model_variant(default=16), act_func_factory=act_func_factory)
+		model = models.WideResNet(num_classes=num_classes, in_channels=in_channels, width=int(match.group(1)), depth=int(match.group(2)), groups=int(match.group(3)), act_func_factory=act_func_factory)
 	else:
 		raise ValueError(f"Invalid model type: {model_type}")
 
@@ -252,9 +251,6 @@ def load_model(C, num_classes, in_shape, details=False):
 			models.replace_submodule(model.classifier, '2', models.Identity, (), {})  # Note: Solves dying ReLU problem that leads to untrainable network (a ReLU after the last convolution often leads to permanently zero output after a few epochs, especially if there are lots of classes in the dataset)
 		elif is_resnet:
 			models.replace_conv2d_in_channels(model, 'conv1', in_channels=in_channels)
-			conv1_out_channels = parse_model_variant(default=model.conv1.out_channels)
-			if conv1_out_channels != model.conv1.out_channels:
-				model.apply(functools.partial(models.pending_scale_channels, actions=actions, factor=fractions.Fraction(conv1_out_channels, model.conv1.out_channels), skip_inputs=(model.conv1,), skip_outputs=(model.fc,)))
 		elif is_efficientnet or is_convnext:
 			models.replace_conv2d_in_channels(model.features[0], '0', in_channels=in_channels)
 			if is_efficientnet and model.features[1][0].stochastic_depth.p == 0.0:
