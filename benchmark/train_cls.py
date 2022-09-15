@@ -151,7 +151,7 @@ def load_dataset(C):
 		train_tfrm = transforms.Compose([
 			transforms.RandomHorizontalFlip(),
 			transforms.RandomCrop(size=64, padding=8),
-			*((transforms.AutoAugment(transforms.AutoAugmentPolicy.CIFAR10),) if C.auto_augment else ()),  # TODO: None or CIFAR10 or IMAGENET?
+			*((transforms.AutoAugment(transforms.AutoAugmentPolicy.CIFAR10),) if C.auto_augment else ()),
 			*valid_tfrm.transforms,
 			transforms.RandomErasing(inplace=True),
 		])
@@ -175,7 +175,7 @@ def load_dataset(C):
 		train_tfrm = transforms.Compose([
 			transforms.RandomResizedCrop(size=224),
 			transforms.RandomHorizontalFlip(),
-			*((transforms.AutoAugment(transforms.AutoAugmentPolicy.IMAGENET),) if C.auto_augment else ()),  # TODO: None or IMAGENET
+			*((transforms.AutoAugment(transforms.AutoAugmentPolicy.IMAGENET),) if C.auto_augment else ()),
 			transforms.ToTensor(),
 			tfrm_normalize_rgb,
 		])
