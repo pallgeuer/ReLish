@@ -33,9 +33,8 @@ def main():
 	parser.add_argument('--dataset', type=str, default='CIFAR10', metavar='NAME', help='Classification dataset to train on (default: %(default)s)')
 	parser.add_argument('--dataset_path', type=str, default=None, metavar='PATH', help='Classification dataset root path (default: ENV{DATASET_PATH} or ~/Datasets)')
 	parser.add_argument('--dataset_workers', type=int, default=4, metavar='NUM', help='Number of worker processes to use for dataset loading (default: %(default)d)')
-	parser.add_argument('--no_auto_augment', dest='auto_augment', action='store_false', help='Disable the AutoAugment input data transform (where present)')
+	parser.add_argument('--no_auto_augment', action='store_true', help='Disable the AutoAugment input data transform (where present)')
 	parser.add_argument('--model', type=str, default='resnet18', metavar='MODEL', help='Classification model (default: %(default)s)')
-	parser.add_argument('--model_details', action='store_true', help='Whether to show model details')
 	parser.add_argument('--act_func', type=str, default='original', metavar='NAME', help='Activation function (default: %(default)s)')
 	parser.add_argument('--optimizer', type=str, default='adam', metavar='NAME', help='Optimizer (default: %(default)s)')
 	parser.add_argument('--scheduler', type=str, default='multisteplr', metavar='NAME', help='Learning rate scheduler (default: %(default)s)')
@@ -44,9 +43,10 @@ def main():
 	parser.add_argument('--epochs', type=int, default=80, metavar='NUM', help='Number of epochs to train (default: %(default)s)')
 	parser.add_argument('--batch_size', type=int, default=64, metavar='SIZE', help='Training batch size (default: %(default)s)')
 	parser.add_argument('--device', type=str, default='cuda', metavar='DEVICE', help='PyTorch device to run on (default: %(default)s)')
-	parser.add_argument('--no_cudnn_bench', dest='cudnn_bench', action='store_false', help='Disable cuDNN benchmark mode to save memory over speed')
-	parser.add_argument('--no_wandb', dest='use_wandb', action='store_false', help='Do not use wandb')
+	parser.add_argument('--no_cudnn_bench', action='store_true', help='Disable cuDNN benchmark mode to save memory over speed')
 	parser.add_argument('--dry', action='store_true', help='Show what would be done but do not actually run the training')
+	parser.add_argument('--no_wandb', dest='use_wandb', action='store_false', help='Do not use wandb')
+	parser.add_argument('--model_details', action='store_true', help='Whether to show model details')
 	args = parser.parse_args()
 
 	if args.dataset_path is None:
@@ -77,7 +77,7 @@ def main():
 
 		C = wandb.config
 		util.print_wandb_config(C)
-		torch.backends.cudnn.benchmark = C.cudnn_bench
+		torch.backends.cudnn.benchmark = not C.no_cudnn_bench
 
 		train_loader, valid_loader, num_classes, in_shape = load_dataset(C)
 		model = load_model(C, num_classes, in_shape, details=args.model_details)
@@ -132,7 +132,7 @@ def load_dataset(C):
 		train_tfrm = transforms.Compose([
 			transforms.RandomHorizontalFlip(),
 			transforms.RandomCrop(size=32, padding=4),
-			*((transforms.AutoAugment(transforms.AutoAugmentPolicy.CIFAR10),) if C.auto_augment else ()),
+			*(() if C.no_auto_augment else (transforms.AutoAugment(transforms.AutoAugmentPolicy.CIFAR10),)),
 			*valid_tfrm.transforms,
 			transforms.RandomErasing(inplace=True),
 		])
@@ -151,7 +151,7 @@ def load_dataset(C):
 		train_tfrm = transforms.Compose([
 			transforms.RandomHorizontalFlip(),
 			transforms.RandomCrop(size=64, padding=8),
-			*((transforms.AutoAugment(transforms.AutoAugmentPolicy.CIFAR10),) if C.auto_augment else ()),
+			*(() if C.no_auto_augment else (transforms.AutoAugment(transforms.AutoAugmentPolicy.CIFAR10),)),
 			*valid_tfrm.transforms,
 			transforms.RandomErasing(inplace=True),
 		])
@@ -175,7 +175,7 @@ def load_dataset(C):
 		train_tfrm = transforms.Compose([
 			transforms.RandomResizedCrop(size=224),
 			transforms.RandomHorizontalFlip(),
-			*((transforms.AutoAugment(transforms.AutoAugmentPolicy.IMAGENET),) if C.auto_augment else ()),
+			*(() if C.no_auto_augment else (transforms.AutoAugment(transforms.AutoAugmentPolicy.IMAGENET),)),
 			transforms.ToTensor(),
 			tfrm_normalize_rgb,
 		])
