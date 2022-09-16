@@ -430,7 +430,7 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 			data = data.to(device, non_blocking=True)
 			target = target.to(device, non_blocking=True)
 
-			optimizer.zero_grad()
+			optimizer.zero_grad(set_to_none=True)
 			output = model(data)
 			assert output.shape[0] == num_in_batch
 			mean_batch_loss = criterion(output if output_layer is None else output_layer(output), target)
