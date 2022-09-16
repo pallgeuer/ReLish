@@ -424,25 +424,23 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 		train_topk = [0] * 5
 		init_detail_stamp = last_detail_stamp = timeit.default_timer()
 
-		for batch_num, (data, target) in enumerate(train_loader):
+		for batch_num, (data, target_cpu) in enumerate(train_loader):
 
 			num_in_batch = data.shape[0]
 			data = data.to(device, non_blocking=True)
-			target = target.to(device, non_blocking=True)
+			target = target_cpu.to(device, non_blocking=True)
 
 			optimizer.zero_grad(set_to_none=True)
 			output = model(data)
-			assert output.shape[0] == num_in_batch
 			mean_batch_loss = criterion(output if output_layer is None else output_layer(output), target)
-			mean_batch_loss_float = mean_batch_loss.item()
 			mean_batch_loss.backward()
 			optimizer.step()
 
 			num_train_samples += num_in_batch
-			train_loss += mean_batch_loss_float * num_in_batch
-			batch_topk_sum = calc_topk_sum(output, target, topn=5)
+			batch_topk_sum = calc_topk_sum(output.cpu(), target_cpu, topn=5)
 			for k in range(5):
 				train_topk[k] += batch_topk_sum[k]
+			train_loss += mean_batch_loss.item() * num_in_batch
 
 			detail_stamp = timeit.default_timer()
 			if detail_stamp - last_detail_stamp >= 2.0:
@@ -469,22 +467,20 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 		init_detail_stamp = last_detail_stamp = timeit.default_timer()
 
 		with torch.inference_mode():
-			for batch_num, (data, target) in enumerate(valid_loader):
+			for batch_num, (data, target_cpu) in enumerate(valid_loader):
 
 				num_in_batch = data.shape[0]
 				data = data.to(device, non_blocking=True)
-				target = target.to(device, non_blocking=True)
+				target = target_cpu.to(device, non_blocking=True)
 
 				output = model(data)
-				assert output.shape[0] == num_in_batch
 				mean_batch_loss = criterion(output if output_layer is None else output_layer(output), target)
-				mean_batch_loss_float = mean_batch_loss.item()
 
 				num_valid_samples += num_in_batch
-				valid_loss += mean_batch_loss_float * num_in_batch
-				batch_topk_sum = calc_topk_sum(output, target, topn=5)
+				batch_topk_sum = calc_topk_sum(output.cpu(), target_cpu, topn=5)
 				for k in range(5):
 					valid_topk[k] += batch_topk_sum[k]
+				valid_loss += mean_batch_loss.item() * num_in_batch
 
 				detail_stamp = timeit.default_timer()
 				if detail_stamp - last_detail_stamp >= 2.0:
