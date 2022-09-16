@@ -193,8 +193,9 @@ def load_dataset(C):
 		raise ValueError(f"Invalid dataset specification: {C.dataset}")
 
 	dataset_workers = min(C.dataset_workers, C.batch_size)
-	train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=C.batch_size, num_workers=dataset_workers, shuffle=True, pin_memory=True)
-	valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=C.batch_size, num_workers=dataset_workers, shuffle=False, pin_memory=True)
+	pin_memory = torch.device(C.device).type == 'cuda'
+	train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=C.batch_size, num_workers=dataset_workers, shuffle=True, pin_memory=pin_memory)
+	valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=C.batch_size, num_workers=dataset_workers, shuffle=False, pin_memory=pin_memory)
 
 	return train_loader, valid_loader, num_classes, in_shape
 
@@ -435,7 +436,7 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 			target = target_cpu.to(device, non_blocking=True)
 
 			optimizer.zero_grad(set_to_none=True)
-			with torch.cuda.amp.autocast(enabled=amp_enabled):
+			with torch.autocast(device_type=device.type, enabled=amp_enabled):
 				output = model(data)
 				mean_batch_loss = criterion(output if output_layer is None else output_layer(output), target)
 			scaler.scale(mean_batch_loss).backward()
@@ -479,7 +480,7 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 				data = data.to(device, non_blocking=True)
 				target = target_cpu.to(device, non_blocking=True)
 
-				with torch.cuda.amp.autocast(enabled=amp_enabled):
+				with torch.autocast(device_type=device.type, enabled=amp_enabled):
 					output = model(data)
 					mean_batch_loss = criterion(output if output_layer is None else output_layer(output), target)
 
