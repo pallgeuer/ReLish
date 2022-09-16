@@ -44,6 +44,7 @@ def main():
 	parser.add_argument('--batch_size', type=int, default=64, metavar='SIZE', help='Training batch size (default: %(default)s)')
 	parser.add_argument('--device', type=str, default='cuda', metavar='DEVICE', help='PyTorch device to run on (default: %(default)s)')
 	parser.add_argument('--no_cudnn_bench', action='store_true', help='Disable cuDNN benchmark mode to save memory over speed')
+	parser.add_argument('--no_amp', action='store_true', help='Disable automatic mixed precision training')
 	parser.add_argument('--dry', action='store_true', help='Show what would be done but do not actually run the training')
 	parser.add_argument('--no_wandb', dest='use_wandb', action='store_false', help='Do not use wandb')
 	parser.add_argument('--model_details', action='store_true', help='Whether to show model details')
@@ -401,6 +402,9 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 
 	valid_topk_max = [0] * 5
 	device = torch.device(C.device)
+	cpu_device = torch.device('cpu')
+	amp_enabled = not C.no_amp and device.type == 'cuda'
+	scaler = torch.cuda.amp.GradScaler(enabled=amp_enabled)
 
 	wandb.log(dict(
 		epoch=0,
@@ -431,13 +435,15 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 			target = target_cpu.to(device, non_blocking=True)
 
 			optimizer.zero_grad(set_to_none=True)
-			output = model(data)
-			mean_batch_loss = criterion(output if output_layer is None else output_layer(output), target)
-			mean_batch_loss.backward()
-			optimizer.step()
+			with torch.cuda.amp.autocast(enabled=amp_enabled):
+				output = model(data)
+				mean_batch_loss = criterion(output if output_layer is None else output_layer(output), target)
+			scaler.scale(mean_batch_loss).backward()
+			scaler.step(optimizer)
+			scaler.update()
 
 			num_train_samples += num_in_batch
-			batch_topk_sum = calc_topk_sum(output.cpu(), target_cpu, topn=5)
+			batch_topk_sum = calc_topk_sum(output.to(device=cpu_device, dtype=float), target_cpu, topn=5)
 			for k in range(5):
 				train_topk[k] += batch_topk_sum[k]
 			train_loss += mean_batch_loss.item() * num_in_batch
@@ -473,11 +479,12 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 				data = data.to(device, non_blocking=True)
 				target = target_cpu.to(device, non_blocking=True)
 
-				output = model(data)
-				mean_batch_loss = criterion(output if output_layer is None else output_layer(output), target)
+				with torch.cuda.amp.autocast(enabled=amp_enabled):
+					output = model(data)
+					mean_batch_loss = criterion(output if output_layer is None else output_layer(output), target)
 
 				num_valid_samples += num_in_batch
-				batch_topk_sum = calc_topk_sum(output.cpu(), target_cpu, topn=5)
+				batch_topk_sum = calc_topk_sum(output.to(device=cpu_device, dtype=float), target_cpu, topn=5)
 				for k in range(5):
 					valid_topk[k] += batch_topk_sum[k]
 				valid_loss += mean_batch_loss.item() * num_in_batch
