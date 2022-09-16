@@ -132,6 +132,12 @@ TRAIN CLASSIFICATION MODEL
 	export DATASET_PATH=~/Datasets
 	# export CUDA_VISIBLE_DEVICES=1
 
+- Cache the relevant datasets in RAM:
+	mkdir /dev/shm/Datasets && cp -r ~/Datasets/{TinyImageNet,Imagenette,Imagewoof} /dev/shm/Datasets
+	export DATASET_PATH=/dev/shm/Datasets
+	# RUN TRAINING SCRIPT
+	# UNDO AFTER TRAINING: rm -rf /dev/shm/Datasets
+
 - Train single classification model:
 	cd "$RELISH_DIR"/benchmark
 	conda activate $ENV
