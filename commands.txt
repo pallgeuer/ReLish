@@ -190,8 +190,8 @@ TRAIN CLASSIFICATION MODEL
 	tmux new -s relish
 		Ctrl+B,"
 		Pane 0:
-			gitpull
 			SET UP AS YOU NORMALLY WOULD
+			gitpull
 			START YOUR RUN / SWEEP (Middle click doesn't work => Use Ctrl+Shift+V or Ctrl+B,] if pasting from within tmux via mouse select)
 		Pane 1:
 			watch nvidia-smi
