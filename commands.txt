@@ -133,7 +133,7 @@ TRAIN CLASSIFICATION MODEL
 	# export CUDA_VISIBLE_DEVICES=1
 
 - Cache the relevant datasets in RAM:
-	mkdir /dev/shm/Datasets && cp -r ~/Datasets/{TinyImageNet,Imagenette,Imagewoof} /dev/shm/Datasets
+	mkdir /dev/shm/Datasets && cp -r ~/Datasets/{MNIST,FashionMNIST,CIFAR,TinyImageNet,Imagenette,Imagewoof} /dev/shm/Datasets
 	export DATASET_PATH=/dev/shm/Datasets
 	# RUN TRAINING SCRIPT
 	# UNDO AFTER TRAINING: rm -rf /dev/shm/Datasets
@@ -161,13 +161,13 @@ TRAIN CLASSIFICATION MODEL
 	cd "$RELISH_DIR"/benchmark
 	conda activate $ENV
 	export WANDB_DIR="$RELISH_DIR"/benchmark/log
-	for sweep in sweep/cls_{mnist,cifar10,cifar100,tinyimagenet,imagenette}_model.yaml; do wandb sweep "$sweep"; done
+	for sweep in sweep/cls_{mnist,cifar10,cifar100,tinyimagenet,imagenette,imagewoof}_model.yaml; do wandb sweep "$sweep"; done
 	# --> Run all the wandb agent commands from the above
 	# --> Select a nominal model for each dataset and update all the dependent sweep files
-	for sweep in sweep/cls_{mnist,cifar10,cifar100,tinyimagenet,imagenette}_act_func.yaml; do wandb sweep "$sweep"; done
+	for sweep in sweep/cls_{mnist,cifar10,cifar100,tinyimagenet,imagenette,imagewoof}_act_func.yaml; do wandb sweep "$sweep"; done
 	# --> Run all the wandb agent commands from the above
 	# --> Select a collection of activation functions that are all high performing and update all the dependent sweep files
-	for sweep in sweep/cls_{mnist,cifar10,cifar100,tinyimagenet,imagenette}_act_func_*.yaml; do wandb sweep "$sweep"; done
+	for sweep in sweep/cls_{mnist,cifar10,cifar100,tinyimagenet,imagenette,imagewoof}_act_func_*.yaml; do wandb sweep "$sweep"; done
 	# --> Run all the wandb agent commands from the above
 
 - Create plots for each dataset:
