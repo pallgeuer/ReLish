@@ -134,6 +134,7 @@ TRAIN CLASSIFICATION MODEL
 
 - Cache the relevant datasets in RAM:
 	mkdir /dev/shm/Datasets && cp -r ~/Datasets/{MNIST,FashionMNIST,CIFAR,TinyImageNet,Imagenette,Imagewoof} /dev/shm/Datasets
+	ls -lAh /dev/shm/Datasets
 	export DATASET_PATH=/dev/shm/Datasets
 	# RUN TRAINING SCRIPT
 	# UNDO AFTER TRAINING: rm -rf /dev/shm/Datasets

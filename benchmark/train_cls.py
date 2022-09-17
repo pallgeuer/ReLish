@@ -203,14 +203,7 @@ def load_dataset(C):
 def load_model(C, num_classes, in_shape, details=False):
 
 	model_type, _, model_variant = C.model.partition('-')
-
-	def parse_model_variant(default):
-		if not model_variant:
-			return default
-		try:
-			return type(default)(model_variant)
-		except ValueError:
-			raise ValueError(f"Invalid model variant: {model_variant}")
+	parse_model_variant = functools.partial(util.parse_value, string=model_variant, error='Invalid model variant')
 
 	is_fcnet = model_type == 'fcnet'
 	is_squeezenetp = model_type == 'squeezenetp'

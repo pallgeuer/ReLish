@@ -1,6 +1,6 @@
 # Utilities
 
-# Import
+# Imports
 import traceback
 import contextlib
 import wandb
@@ -48,4 +48,13 @@ def format_duration(duration):
 	m, s = divmod(int(duration), 60)
 	h, m = divmod(m, 60)
 	return f'{h:0>2}:{m:0>2}:{s:0>2}'
+
+# Parse a string to the type of a default value
+def parse_value(string, default, error):
+	if not string:
+		return default
+	try:
+		return type(default)(string)
+	except ValueError:
+		raise ValueError(f"{error}: {string}")
 # EOF

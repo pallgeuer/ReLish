@@ -1,6 +1,6 @@
 # Models
 
-# Import
+# Imports
 import fractions
 from typing import Union, Type, Tuple
 import torch
