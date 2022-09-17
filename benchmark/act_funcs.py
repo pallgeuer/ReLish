@@ -4,6 +4,7 @@
 import functools
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import util
 
 #
@@ -13,6 +14,25 @@ import util
 # Note: All JIT-scripted activation functions have an inplace argument, but do not actually support it, because scripted kernel fusions
 #       often do not work across in-place operation boundaries. Thus, if any in-place operations are used in the implementation, the
 #       performance drops to that of the non-scripted versions (or below).
+
+# Mish: https://arxiv.org/pdf/1908.08681.pdf
+class MishJIT(nn.Module):
+
+	__constants__ = ['inplace']
+	inplace: bool  # Ignored
+
+	def __init__(self, inplace=False):
+		super().__init__()
+		self.inplace = inplace
+
+	# noinspection PyMethodMayBeStatic
+	def forward(self, x):
+		return mish_jit(x)
+
+# noinspection PyUnusedLocal
+@torch.jit.script
+def mish_jit(x, inplace=False):
+	return x.mul(F.softplus(x).tanh())
 
 # E-swish: https://arxiv.org/pdf/1801.07145.pdf
 class ESwish(nn.Module):
@@ -85,6 +105,7 @@ act_func_factory_map = {
 	'swish-beta': SwishBeta,
 	'hardswish': nn.Hardswish,
 	'mish': nn.Mish,
+	'mish-jit': MishJIT,
 	'sigmoid': lambda inplace=False: nn.Sigmoid(),
 	'hardsigmoid': nn.Hardsigmoid,
 	'logsigmoid': lambda inplace=False: nn.LogSigmoid(),
