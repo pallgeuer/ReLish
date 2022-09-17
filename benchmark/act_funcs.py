@@ -82,11 +82,10 @@ def swish_beta(x, beta, inplace=False):
 #
 
 # TODO: Update the sweep files with the new palette of activation functions
-# TODO: Test all the custom implemented activation functions
+# TODO: Test all the custom implemented activation functions for correctness
 # TODO: ReLish (alpha, beta, gamma being the slope of the positive linear portion)
 # TODO: ReLish=xexpx, ReLish=x/coshx, ReLish=x/(2coshx-1)
-# TODO: Own mish implementation (to be comparable to own implementations of ReLish and other)
-# TODO: tanh(x)*log(1+exp(x)), x*log(1 + tanh(exp(x)))
+# TODO: tanh(x)*log(1+exp(x)), x*log(1 + tanh(exp(x))) (CAREFUL WITH POSSIBLE GRADIENT STABILITY ISSUES)
 # TODO: Aria-2, Bent's Identity, SQNL, ELisH, Hard ELisH, SReLU, ISRU, ISRLU, Flatten T-Swish, SineReLU, Weighted Tanh, LeCun's Tanh
 
 # Activation function factory map
