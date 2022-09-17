@@ -89,33 +89,38 @@ def swish_beta(x, beta, inplace=False):
 # TODO: Aria-2, Bent's Identity, SQNL, ELisH, Hard ELisH, SReLU, ISRU, ISRLU, Flatten T-Swish, SineReLU, Weighted Tanh, LeCun's Tanh
 
 # Activation function factory map
+# noinspection PyArgumentList
 act_func_factory_map = {
 	'relu': nn.ReLU,
 	'relu6': nn.ReLU6,
-	'prelu': lambda inplace=False: nn.PReLU(),  # Note: Single learnable parameter is shared between all input channels / Ideally do not use weight decay with this
+	'prelu': lambda inplace=False, **kwargs: nn.PReLU(**kwargs),  # Note: Single learnable parameter is shared between all input channels, ideally do not use weight decay with this
 	'rrelu': nn.RReLU,
 	'threshold': functools.partial(nn.Threshold, threshold=-1.0, value=-1.0),
 	'elu': functools.partial(nn.ELU, alpha=1.0),
 	'celu': functools.partial(nn.CELU, alpha=0.5),  # Note: alpha = 1.0 would make CELU equivalent to ELU
 	'selu': nn.SELU,
-	'gelu-exact': lambda inplace=False: nn.GELU(approximate='none'),
-	'gelu-approx': lambda inplace=False: nn.GELU(approximate='tanh'),
+	'gelu-exact': lambda inplace=False, **kwargs: nn.GELU(approximate='none', **kwargs),
+	'gelu-approx': lambda inplace=False, **kwargs: nn.GELU(approximate='tanh', **kwargs),
 	'silu': nn.SiLU,
 	'swish-beta': SwishBeta,
 	'hardswish': nn.Hardswish,
 	'mish': nn.Mish,
 	'mish-jit': MishJIT,
-	'sigmoid': lambda inplace=False: nn.Sigmoid(),
+	'sigmoid': lambda inplace=False, **kwargs: nn.Sigmoid(**kwargs),
 	'hardsigmoid': nn.Hardsigmoid,
-	'logsigmoid': lambda inplace=False: nn.LogSigmoid(),
-	'softshrink': lambda inplace=False: nn.Softshrink(lambd=0.5),
-	'hardshrink': lambda inplace=False: nn.Hardshrink(lambd=0.5),
-	'tanh': lambda inplace=False: nn.Tanh(),
-	'tanhshrink': lambda inplace=False: nn.Tanhshrink(),
+	'logsigmoid': lambda inplace=False, **kwargs: nn.LogSigmoid(**kwargs),
+	'softshrink': lambda inplace=False, **kwargs: nn.Softshrink(lambd=0.5, **kwargs),
+	'hardshrink': lambda inplace=False, **kwargs: nn.Hardshrink(lambd=0.5, **kwargs),
+	'tanh': lambda inplace=False, **kwargs: nn.Tanh(**kwargs),
+	'tanhshrink': lambda inplace=False, **kwargs: nn.Tanhshrink(**kwargs),
 	'hardtanh': nn.Hardtanh,
-	'softsign': lambda inplace=False: nn.Softsign(),
-	'softplus': lambda inplace=False: nn.Softplus(beta=1),
+	'softsign': lambda inplace=False, **kwargs: nn.Softsign(**kwargs),
+	'softplus': lambda inplace=False, **kwargs: nn.Softplus(beta=1, **kwargs),
 }
+act_func_extra = (
+	'leakyrelu-0.01', 'leakyrelu-0.05', 'leakyrelu-0.25',
+	'eswish-1.25', 'eswish-1.5', 'eswish-1.75',
+)
 
 # Get a factory callable for a given activation function
 def get_act_func_factory(name):
