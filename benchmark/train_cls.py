@@ -19,6 +19,7 @@ import torchvision.datasets
 import torchvision.transforms as transforms
 import wandb
 import models
+import act_funcs
 import util
 
 # Main function
@@ -218,7 +219,7 @@ def load_model(C, num_classes, in_shape, details=False):
 	if C.act_func == 'original':
 		act_func_factory = act_func_class = None
 	else:
-		act_func_factory = get_act_func_factory(C)
+		act_func_factory = act_funcs.get_act_func_factory(C.act_func)
 		act_func_class = act_func_factory().__class__
 	in_channels = in_shape[0]
 
@@ -285,78 +286,6 @@ def load_model(C, num_classes, in_shape, details=False):
 	model.to(device=C.device)
 
 	return model
-
-# Get the required activation function class
-def get_act_func_factory(C):  # TODO: Refactor this into another file along with the implementations of the other activation functions
-	# Returns a callable that accepts an 'inplace' keyword argument
-	# TODO: ReLish (alpha, beta, gamma being the slope of the positive linear portion)
-	# TODO: ReLish=xexpx, ReLish=x/coshx, ReLish=x/(2coshx-1)
-	# TODO: Own mish implementation (to be comparable to own implementations of ReLish and other)
-	# TODO: swish-beta, eswish-1.25, eswish-1.5, eswish-1.75
-	# TODO: tanh(x)*log(1+exp(x)), x*log(1 + tanh(exp(x)))
-	# TODO: Aria-2, Bent's Identity, SQNL, ELisH, Hard ELisH, SReLU, ISRU, ISRLU, Flatten T-Swish, SineReLU, Weighted Tanh, LeCun's Tanh
-	if C.act_func == 'elu':
-		return functools.partial(nn.ELU, alpha=1.0)
-	elif C.act_func == 'hardshrink':
-		return lambda lambd=0.5, inplace=False: nn.Hardshrink(lambd=lambd)
-	elif C.act_func == 'hardsigmoid':
-		return nn.Hardsigmoid
-	elif C.act_func == 'hardtanh':
-		return nn.Hardtanh
-	elif C.act_func == 'hardswish':
-		return nn.Hardswish
-	elif C.act_func == 'leakyrelu-0.01':
-		return functools.partial(nn.LeakyReLU, negative_slope=0.01)
-	elif C.act_func == 'leakyrelu-0.05':
-		return functools.partial(nn.LeakyReLU, negative_slope=0.05)
-	elif C.act_func == 'leakyrelu-0.25':
-		return functools.partial(nn.LeakyReLU, negative_slope=0.25)
-	elif C.act_func == 'logsigmoid':
-		return lambda inplace=False: nn.LogSigmoid()
-	elif C.act_func == 'prelu':
-		return lambda inplace=False: nn.PReLU()  # Note: Single learnable parameter is shared between all input channels / Ideally do not use weight decay with this
-	elif C.act_func == 'relu':
-		return nn.ReLU
-	elif C.act_func == 'relu6':
-		return nn.ReLU6
-	elif C.act_func == 'rrelu':
-		return nn.RReLU
-	elif C.act_func == 'selu':
-		return nn.SELU
-	elif C.act_func == 'celu':
-		return functools.partial(nn.CELU, alpha=0.5)  # Note: alpha = 1.0 would make CELU equivalent to ELU
-	elif C.act_func == 'gelu-exact':
-		return lambda approximate='none', inplace=False: nn.GELU(approximate=approximate)
-	elif C.act_func == 'gelu-approx':
-		return lambda approximate='tanh', inplace=False: nn.GELU(approximate=approximate)
-	elif C.act_func == 'sigmoid':
-		return lambda inplace=False: nn.Sigmoid()
-	elif C.act_func in ('silu', 'swish-1'):
-		return nn.SiLU
-	elif C.act_func == 'swish-beta':
-		raise NotImplementedError  # TODO: x * sigmoid(beta * x) for trainable parameter beta
-	elif C.act_func == 'eswish-1.25':
-		raise NotImplementedError  # TODO: 1.25 * x * sigmoid(x)
-	elif C.act_func == 'eswish-1.5':
-		raise NotImplementedError  # TODO: 1.5 * x * sigmoid(x)
-	elif C.act_func == 'eswish-1.75':
-		raise NotImplementedError  # TODO: 1.75 * x * sigmoid(x)
-	elif C.act_func == 'mish':
-		return nn.Mish
-	elif C.act_func == 'softplus':
-		return lambda beta=1.0, inplace=False: nn.Softplus(beta=beta)
-	elif C.act_func == 'softshrink':
-		return lambda lambd=0.5, inplace=False: nn.Softshrink(lambd=lambd)
-	elif C.act_func == 'softsign':
-		return lambda inplace=False: nn.Softsign()
-	elif C.act_func == 'tanh':
-		return lambda inplace=False: nn.Tanh()
-	elif C.act_func == 'tanhshrink':
-		return lambda inplace=False: nn.Tanhshrink()
-	elif C.act_func == 'threshold':
-		return functools.partial(nn.Threshold, threshold=-1.0, value=-1.0)
-	else:
-		raise ValueError(f"Invalid activation function specification: {C.act_func}")
 
 # Load the criterion
 def load_criterion(C):
