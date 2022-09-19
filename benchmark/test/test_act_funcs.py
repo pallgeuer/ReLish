@@ -3,7 +3,6 @@
 
 # Imports
 import argparse
-import itertools
 import torch
 import act_funcs  # noqa
 import matplotlib.pyplot as plt
@@ -12,7 +11,7 @@ import matplotlib.pyplot as plt
 def plot_act_funcs():
 	print("Plotting all activation functions...")
 	x = torch.linspace(-6.5, 6.5, 1301)
-	for act_func_name in itertools.chain(act_funcs.act_func_factory_map.keys(), act_funcs.act_func_extra):
+	for act_func_name in act_funcs.act_funcs:
 		act_func_factory = act_funcs.get_act_func_factory(act_func_name)
 		act_func = act_func_factory(inplace=False)
 		y = act_func(x)
@@ -49,8 +48,10 @@ def compare_act_funcs():
 	print("Comparing equivalent activation functions...")
 	compare_act_func_pair(act_funcs.get_act_func_factory('relu')(), act_funcs.get_act_func_factory('threshold')(threshold=0.0, value=0.0))
 	compare_act_func_pair(act_funcs.get_act_func_factory('relu')(), act_funcs.get_act_func_factory('leakyrelu-0')())
+	compare_act_func_pair(act_funcs.get_act_func_factory('prelu')(), act_funcs.get_act_func_factory('leakyrelu-0.25')())
 	compare_act_func_pair(act_funcs.get_act_func_factory('elu')(), act_funcs.get_act_func_factory('celu')(alpha=1.0))
 	compare_act_func_pair(act_funcs.get_act_func_factory('silu')(), act_funcs.get_act_func_factory('eswish-1')())
+	compare_act_func_pair(act_funcs.get_act_func_factory('silu')(), act_funcs.get_act_func_factory('swish-beta')())
 	compare_act_func_pair(act_funcs.get_act_func_factory('mish')(), act_funcs.get_act_func_factory('mish-jit')())
 
 # Compare a pair of activation function implementations that should be equivalent
