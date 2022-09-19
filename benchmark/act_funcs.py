@@ -78,7 +78,7 @@ class SwishBeta(nn.Module):
 def swish_beta(x, beta, inplace=False):
 	return x.mul(x.mul(beta).sigmoid())
 
-# ReLishA: C1 version, alpha = 1, beta = 1, gamma = 1
+# ReLish: C1 version, alpha = 1, beta = 1, gamma = 1
 class ReLishA(nn.Module):
 
 	__constants__ = ['inplace']
@@ -93,11 +93,11 @@ class ReLishA(nn.Module):
 		return relisha_jit(x)
 
 # noinspection PyUnusedLocal
-# @torch.jit.script
+@torch.jit.script
 def relisha_jit(x, inplace=False):
 	return x.mul(x.exp()).where(x < 0, x)
 
-# ReLishB: C2 version, alpha = 2, beta = 1, gamma = 1
+# ReLish: C2 version, alpha = 2, beta = 1, gamma = 1
 class ReLishB(nn.Module):
 
 	__constants__ = ['inplace']
@@ -116,7 +116,7 @@ class ReLishB(nn.Module):
 def relishb_jit(x, inplace=False):
 	return x.div(x.cosh()).where(x < 0, x)
 
-# ReLishC: C2 version, alpha = 1, beta = 1, gamma = 1
+# ReLish: C2 version, alpha = 1, beta = 1, gamma = 1
 class ReLishC(nn.Module):
 
 	__constants__ = ['inplace']
@@ -134,6 +134,35 @@ class ReLishC(nn.Module):
 @torch.jit.script
 def relishc_jit(x, inplace=False):
 	return x.div(x.exp() + torch.expm1(x.neg())).where(x < 0, x)
+
+# ReLish: General C1 version
+class ReLishG1(nn.Module):
+
+	__constants__ = ['alpha', 'beta', 'gamma', 'inplace']
+	alpha: float
+	beta: float
+	gamma: float
+	inplace: bool  # Ignored
+
+	def __init__(self, alpha=1.0, beta=1.0, gamma=1.0, inplace=False):
+		super().__init__()
+		self.alpha = alpha
+		self.beta = beta
+		self.gamma = gamma
+		self.inplace = inplace
+
+	# noinspection PyMethodMayBeStatic
+	def forward(self, x):
+		return relishg1_jit(x, alpha=self.alpha, beta=self.beta, gamma=self.gamma)
+
+	def extra_repr(self):
+		return f"alpha={self.alpha}, beta={self.beta}, gamma={self.gamma}"
+
+# noinspection PyUnusedLocal
+@torch.jit.script
+def relishg1_jit(x, alpha=1.0, beta=1.0, gamma=1.0, inplace=False):
+	gammax = x.mul(gamma)
+	return gammax.mul(alpha).div(torch.expm1(x.mul(-beta)) + alpha).where(x < 0, gammax)
 
 #
 # Utilities
@@ -179,6 +208,7 @@ act_func_factory_map = {
 act_func_extra_map = {
 	'leakyrelu': ('leakyrelu-0.01', 'leakyrelu-0.05', 'leakyrelu-0.25'),
 	'eswish': ('eswish-1.25', 'eswish-1.5', 'eswish-1.75'),
+	'relishg1': ('relishg1-0.8-0.7-1.25',),  # TODO: What are good default parameter sets?
 }
 act_funcs = tuple(itertools.chain(act_func_factory_map.keys(), itertools.chain.from_iterable(act_func_extra_map.values())))
 
@@ -194,6 +224,12 @@ def get_act_func_factory(name):
 	elif name.startswith('eswish-'):
 		beta = util.parse_value(name[7:], default=1.25, error="Invalid E-swish beta specification")  # Common values: 1.25, 1.50, 1.75
 		return functools.partial(ESwish, beta=beta)
+	elif name.startswith('relishg1-'):
+		params = name[9:].split('-')
+		alpha = util.parse_value(params[0] if len(params) >= 1 else None, default=1.0, error="Invalid ReLish G1 alpha specification")
+		beta = util.parse_value(params[1] if len(params) >= 2 else None, default=1.0, error="Invalid ReLish G1 beta specification")
+		gamma = util.parse_value(params[2] if len(params) >= 3 else None, default=1.0, error="Invalid ReLish G1 gamma specification")
+		return functools.partial(ReLishG1, alpha=alpha, beta=beta, gamma=gamma)
 	else:
 		raise ValueError(f"Invalid activation function specification: {name}")
 # EOF
