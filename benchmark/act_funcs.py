@@ -133,7 +133,7 @@ class ReLishC(nn.Module):
 # noinspection PyUnusedLocal
 @torch.jit.script
 def relishc_jit(x, inplace=False):
-	return x.div(x.exp() + torch.expm1(x.neg())).where(x < 0, x)
+	return x.div(x.cosh().mul(2) - 1).where(x < 0, x)
 
 # ReLish: General C1 version
 class ReLishG1(nn.Module):
@@ -164,12 +164,40 @@ def relishg1_jit(x, alpha=1.0, beta=1.0, gamma=1.0, inplace=False):
 	gammax = x.mul(gamma)
 	return gammax.mul(alpha).div(torch.expm1(x.mul(-beta)) + alpha).where(x < 0, gammax)
 
+# ReLish: General C2 version
+class ReLishG2(nn.Module):
+
+	__constants__ = ['alpha', 'beta', 'gamma', 'inplace']
+	alpha: float
+	beta: float
+	gamma: float
+	inplace: bool  # Ignored
+
+	def __init__(self, alpha=1.0, beta=1.0, gamma=1.0, inplace=False):
+		super().__init__()
+		self.alpha = alpha
+		self.beta = beta
+		self.gamma = gamma
+		self.inplace = inplace
+
+	# noinspection PyMethodMayBeStatic
+	def forward(self, x):
+		return relishg2_jit(x, alpha=self.alpha, beta=self.beta, gamma=self.gamma)
+
+	def extra_repr(self):
+		return f"alpha={self.alpha}, beta={self.beta}, gamma={self.gamma}"
+
+# noinspection PyUnusedLocal
+@torch.jit.script
+def relishg2_jit(x, alpha=1.0, beta=1.0, gamma=1.0, inplace=False):
+	gammax = x.mul(gamma)
+	return gammax.mul(alpha).div(x.mul(beta).cosh().mul(2) + (alpha - 2)).where(x < 0, gammax)
+
 #
 # Utilities
 #
 
 # TODO: Update the sweep files with the new palette of activation functions
-# TODO: ReLish (alpha, beta, gamma being the slope of the positive linear portion)
 # TODO: tanh(x)*log(1+exp(x)), x*log(1 + tanh(exp(x))) (CAREFUL WITH POSSIBLE GRADIENT STABILITY ISSUES)
 # TODO: Aria-2, Bent's Identity, SQNL, ELisH, Hard ELisH, SReLU, ISRU, ISRLU, Flatten T-Swish, SineReLU, Weighted Tanh, LeCun's Tanh
 
@@ -209,6 +237,7 @@ act_func_extra_map = {
 	'leakyrelu': ('leakyrelu-0.01', 'leakyrelu-0.05', 'leakyrelu-0.25'),
 	'eswish': ('eswish-1.25', 'eswish-1.5', 'eswish-1.75'),
 	'relishg1': ('relishg1-0.8-0.7-1.25',),  # TODO: What are good default parameter sets?
+	'relishg2': ('relishg2-0.8-0.7-1.25',),  # TODO: What are good default parameter sets?
 }
 act_funcs = tuple(itertools.chain(act_func_factory_map.keys(), itertools.chain.from_iterable(act_func_extra_map.values())))
 
@@ -230,6 +259,12 @@ def get_act_func_factory(name):
 		beta = util.parse_value(params[1] if len(params) >= 2 else None, default=1.0, error="Invalid ReLish G1 beta specification")
 		gamma = util.parse_value(params[2] if len(params) >= 3 else None, default=1.0, error="Invalid ReLish G1 gamma specification")
 		return functools.partial(ReLishG1, alpha=alpha, beta=beta, gamma=gamma)
+	elif name.startswith('relishg2-'):
+		params = name[9:].split('-')
+		alpha = util.parse_value(params[0] if len(params) >= 1 else None, default=1.0, error="Invalid ReLish G2 alpha specification")
+		beta = util.parse_value(params[1] if len(params) >= 2 else None, default=1.0, error="Invalid ReLish G2 beta specification")
+		gamma = util.parse_value(params[2] if len(params) >= 3 else None, default=1.0, error="Invalid ReLish G2 gamma specification")
+		return functools.partial(ReLishG2, alpha=alpha, beta=beta, gamma=gamma)
 	else:
 		raise ValueError(f"Invalid activation function specification: {name}")
 # EOF

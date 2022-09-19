@@ -62,8 +62,10 @@ def compare_act_funcs(device: Union[str, torch.device] = 'cuda'):
 	compare_act_func_pair('eswish-1', 'swish-beta', device=device)
 	compare_act_func_pair('silu', 'eswish-1', device=device)
 	compare_act_func_pair('silu', 'swish-beta', device=device)
-	compare_act_func_pair('mish', 'mish-jit', device=device, dtol_factor=200)  # Note: The native mish is observed to be more numerically correct than mish-jit
+	compare_act_func_pair('mish', 'mish-jit', device=device, dtol_factor=200)  # Note: mish has significantly better true numerical accuracy
 	compare_act_func_pair('relisha', 'relishg1-1-1-1', device=device)
+	compare_act_func_pair('relishb', 'relishg2-2-1-1', device=device, dtol_factor=3)  # Note: relishb has slightly better true numerical accuracy
+	compare_act_func_pair('relishc', 'relishg2-1-1-1', device=device)
 
 # Compare a pair of activation function implementations that should be equivalent
 def compare_act_func_pair(name_a, name_b, kwargs_a=None, kwargs_b=None, device: Union[str, torch.device] = 'cuda', dtol_factor=1.0):
