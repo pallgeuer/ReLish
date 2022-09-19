@@ -78,14 +78,69 @@ class SwishBeta(nn.Module):
 def swish_beta(x, beta, inplace=False):
 	return x.mul(x.mul(beta).sigmoid())
 
+# ReLishA: C1 version, alpha = 1, beta = 1, gamma = 1
+class ReLishA(nn.Module):
+
+	__constants__ = ['inplace']
+	inplace: bool  # Ignored
+
+	def __init__(self, inplace=False):
+		super().__init__()
+		self.inplace = inplace
+
+	# noinspection PyMethodMayBeStatic
+	def forward(self, x):
+		return relisha_jit(x)
+
+# noinspection PyUnusedLocal
+# @torch.jit.script
+def relisha_jit(x, inplace=False):
+	return x.mul(x.exp()).where(x < 0, x)
+
+# ReLishB: C2 version, alpha = 2, beta = 1, gamma = 1
+class ReLishB(nn.Module):
+
+	__constants__ = ['inplace']
+	inplace: bool  # Ignored
+
+	def __init__(self, inplace=False):
+		super().__init__()
+		self.inplace = inplace
+
+	# noinspection PyMethodMayBeStatic
+	def forward(self, x):
+		return relishb_jit(x)
+
+# noinspection PyUnusedLocal
+@torch.jit.script
+def relishb_jit(x, inplace=False):
+	return x.div(x.cosh()).where(x < 0, x)
+
+# ReLishC: C2 version, alpha = 1, beta = 1, gamma = 1
+class ReLishC(nn.Module):
+
+	__constants__ = ['inplace']
+	inplace: bool  # Ignored
+
+	def __init__(self, inplace=False):
+		super().__init__()
+		self.inplace = inplace
+
+	# noinspection PyMethodMayBeStatic
+	def forward(self, x):
+		return relishc_jit(x)
+
+# noinspection PyUnusedLocal
+@torch.jit.script
+def relishc_jit(x, inplace=False):
+	return x.div(x.exp() + torch.expm1(x.neg())).where(x < 0, x)
+
 #
 # Utilities
 #
 
 # TODO: Update the sweep files with the new palette of activation functions
-# TODO: Test all the custom implemented activation functions for correctness
 # TODO: ReLish (alpha, beta, gamma being the slope of the positive linear portion)
-# TODO: ReLish=xexpx, ReLish=x/coshx, ReLish=x/(2coshx-1)
 # TODO: tanh(x)*log(1+exp(x)), x*log(1 + tanh(exp(x))) (CAREFUL WITH POSSIBLE GRADIENT STABILITY ISSUES)
 # TODO: Aria-2, Bent's Identity, SQNL, ELisH, Hard ELisH, SReLU, ISRU, ISRLU, Flatten T-Swish, SineReLU, Weighted Tanh, LeCun's Tanh
 
@@ -117,6 +172,9 @@ act_func_factory_map = {
 	'hardtanh': nn.Hardtanh,
 	'softsign': lambda inplace=False, **kwargs: nn.Softsign(**kwargs),
 	'softplus': lambda inplace=False, **kwargs: nn.Softplus(beta=1, **kwargs),
+	'relisha': ReLishA,
+	'relishb': ReLishB,
+	'relishc': ReLishC,
 }
 act_func_extra_map = {
 	'leakyrelu': ('leakyrelu-0.01', 'leakyrelu-0.05', 'leakyrelu-0.25'),
