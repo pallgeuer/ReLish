@@ -1,6 +1,7 @@
 # Activation functions
 
 # Imports
+import itertools
 import functools
 import torch
 import torch.nn as nn
@@ -55,7 +56,7 @@ class ESwish(nn.Module):
 # noinspection PyUnusedLocal
 @torch.jit.script
 def eswish(x, beta=1.25, inplace=False):
-	return x.mul(x.sigmoid()).mul(beta)
+	return x.mul(x.sigmoid().mul(beta))
 
 # SwishBeta: https://arxiv.org/pdf/1710.05941.pdf
 class SwishBeta(nn.Module):
@@ -117,10 +118,11 @@ act_func_factory_map = {
 	'softsign': lambda inplace=False, **kwargs: nn.Softsign(**kwargs),
 	'softplus': lambda inplace=False, **kwargs: nn.Softplus(beta=1, **kwargs),
 }
-act_func_extra = (
-	'leakyrelu-0.01', 'leakyrelu-0.05', 'leakyrelu-0.25',
-	'eswish-1.25', 'eswish-1.5', 'eswish-1.75',
-)
+act_func_extra_map = {
+	'leakyrelu': ('leakyrelu-0.01', 'leakyrelu-0.05', 'leakyrelu-0.25'),
+	'eswish': ('eswish-1.25', 'eswish-1.5', 'eswish-1.75'),
+}
+act_funcs = tuple(itertools.chain(act_func_factory_map.keys(), itertools.chain.from_iterable(act_func_extra_map.values())))
 
 # Get a factory callable for a given activation function
 def get_act_func_factory(name):
