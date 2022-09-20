@@ -16,10 +16,10 @@
 % Example:
 %   chosen = relish_params(false, [0.01 10.0], 101, [0.1 10.0], 101, [1 1.75], 4, 0.035, [0 2], [-2 0], [-1 0], false);
 %   T = array2table(chosen); T.Properties.VariableNames(1:3) = {'alpha', 'beta', 'gamma'}; writetable(T, 'relishc1.csv');
-%   fid = fopen('relishc1.txt','w'); fprintf(fid, '[''original'''); for params = chosen(randperm(size(chosen,1)),:)'; fprintf(fid, ', ''relishg1-%.4g-%.4g-%.4g''', params(1), params(2), params(3)); end; fprintf(fid, ']\n');
+%   fid = fopen('relishc1.txt','w'); fprintf(fid, '[''relu'''); for params = chosen(randperm(size(chosen,1)),:)'; fprintf(fid, ', ''relishg1-%.4g-%.4g-%.4g''', params(1), params(2), params(3)); end; fprintf(fid, ']\n');
 %   chosen = relish_params(true, [0.01 10.0], 101, [0.1 10.0], 101, [1 1.75], 4, 0.035, [0 2], [-2 0], [-1 0], false);
 %   T = array2table(chosen); T.Properties.VariableNames(1:3) = {'alpha', 'beta', 'gamma'}; writetable(T, 'relishc2.csv');
-%   fid = fopen('relishc2.txt','w'); fprintf(fid, '[''original'''); for params = chosen(randperm(size(chosen,1)),:)'; fprintf(fid, ', ''relishg2-%.4g-%.4g-%.4g''', params(1), params(2), params(3)); end; fprintf(fid, ']\n');
+%   fid = fopen('relishc2.txt','w'); fprintf(fid, '[''relu'''); for params = chosen(randperm(size(chosen,1)),:)'; fprintf(fid, ', ''relishg2-%.4g-%.4g-%.4g''', params(1), params(2), params(3)); end; fprintf(fid, ']\n');
 %
 function [chosen, candidates] = relish_params(C2, alpha_range, alpha_num, beta_range, beta_num, gamma_range, gamma_num, similarity_thres, area_range, xmin_range, fmin_range, plot_all)
 
