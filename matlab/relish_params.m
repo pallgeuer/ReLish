@@ -2,9 +2,11 @@
 %
 % C2 = Whether the activation function should be C2 (true) or just C1 (false)
 % alpha_range = Logarithmic [min max] range to draw alpha values from
-% alpha_num = Number of linearly spaced alpha values to consider
+% alpha_num = Number of alpha values to consider
 % beta_range = Logarithmic [min max] range to draw beta values from
-% beta_num = Number of linearly spaced beta values to consider
+% beta_num = Number of beta values to consider
+% gamma_range = Linear [min max] range to use for gamma
+% gamma_num = Number of gamma values to use
 % similarity_thres = Minimum Gaussian-weighted (stddev=3) difference between selected activation functions
 % area_range = Allowable area range
 % xmin_range = Allowable xmin range
@@ -12,30 +14,32 @@
 % plot_all = Whether to animate a plot with all candidates
 %
 % Example:
-%   chosen = relish_pairs(false, [0.01 10.0], 101, [0.1 10.0], 101, 0.035, [0 2], [-2 0], [-1 0], false);
-%   T = array2table(chosen(:,1:2)); T.Properties.VariableNames(1:2) = {'alpha', 'beta'}; writetable(T, 'relishc1.csv');
-%   chosen = relish_pairs(true, [0.01 10.0], 101, [0.1 10.0], 101, 0.035, [0 2], [-2 0], [-1 0], false);
-%   T = array2table(chosen(:,1:2)); T.Properties.VariableNames(1:2) = {'alpha', 'beta'}; writetable(T, 'relishc2.csv');
+%   chosen = relish_params(false, [0.01 10.0], 101, [0.1 10.0], 101, [1 1.75], 4, 0.035, [0 2], [-2 0], [-1 0], false);
+%   T = array2table(chosen); T.Properties.VariableNames(1:3) = {'alpha', 'beta', 'gamma'}; writetable(T, 'relishc1.csv');
+%   fid = fopen('relishc1.txt','w'); fprintf(fid, '[''original'''); for params = chosen(randperm(size(chosen,1)),:)'; fprintf(fid, ', ''relishg1-%.4g-%.4g-%.4g''', params(1), params(2), params(3)); end; fprintf(fid, ']\n');
+%   chosen = relish_params(true, [0.01 10.0], 101, [0.1 10.0], 101, [1 1.75], 4, 0.035, [0 2], [-2 0], [-1 0], false);
+%   T = array2table(chosen); T.Properties.VariableNames(1:3) = {'alpha', 'beta', 'gamma'}; writetable(T, 'relishc2.csv');
+%   fid = fopen('relishc2.txt','w'); fprintf(fid, '[''original'''); for params = chosen(randperm(size(chosen,1)),:)'; fprintf(fid, ', ''relishg2-%.4g-%.4g-%.4g''', params(1), params(2), params(3)); end; fprintf(fid, ']\n');
 %
-function [chosen, candidates] = relish_pairs(C2, alpha_range, alpha_num, beta_range, beta_num, similarity_thres, area_range, xmin_range, fmin_range, plot_all)
+function [chosen, candidates] = relish_params(C2, alpha_range, alpha_num, beta_range, beta_num, gamma_range, gamma_num, similarity_thres, area_range, xmin_range, fmin_range, plot_all)
 
 	% Default arguments
-	if nargin < 7 || isempty(area_range)
+	if nargin < 9 || isempty(area_range)
 		area_range = [0 inf];
 	end
-	if nargin < 8 || isempty(xmin_range)
+	if nargin < 10 || isempty(xmin_range)
 		xmin_range = [-inf 0];
 	end
-	if nargin < 9 || isempty(fmin_range)
+	if nargin < 11 || isempty(fmin_range)
 		fmin_range = [-inf 0];
 	end
-	if nargin < 10 || isempty(plot_all)
+	if nargin < 12 || isempty(plot_all)
 		plot_all = false;
 	end
 
 	% Select which type of ReLish activation function
 	if C2
-		f = @(x, alpha, beta) x .* alpha ./ (exp(-beta*x) + alpha + exp(beta*x) - 2);
+		f = @(x, alpha, beta) x .* alpha ./ (2*cosh(beta*x) + alpha - 2);
 	else
 		f = @(x, alpha, beta) x .* alpha ./ (exp(-beta*x) + alpha - 1);
 	end
@@ -155,6 +159,12 @@ function [chosen, candidates] = relish_pairs(C2, alpha_range, alpha_num, beta_ra
 
 	% Plot the selected activation functions
 	PlotCurves(72, chosen, f, xcomp, mish, mishgc, swish, swishgc, xminmish, fminmish, xminswish, fminswish);
+	
+	% Strip it down to just the parameters and incorporate gamma
+	chosen = chosen(:,1:2);
+	gamma_value = linspace(gamma_range(1), gamma_range(2), gamma_num);
+	gamma_vals = repmat(gamma_value, size(chosen,1), 1);
+	chosen = [repmat(chosen, gamma_num, 1) gamma_vals(:)];
 	
 end
 
