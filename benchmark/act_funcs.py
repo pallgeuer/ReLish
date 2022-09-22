@@ -78,6 +78,44 @@ class SwishBeta(nn.Module):
 def swish_beta(x, beta, inplace=False):
 	return x.mul(x.mul(beta).sigmoid())
 
+# AltMish: Alternative A considered in mish paper (https://arxiv.org/pdf/1908.08681.pdf)
+class AltMishA(nn.Module):
+
+	__constants__ = ['inplace']
+	inplace: bool  # Ignored
+
+	def __init__(self, inplace=False):
+		super().__init__()
+		self.inplace = inplace
+
+	# noinspection PyMethodMayBeStatic
+	def forward(self, x):
+		return altmisha_jit(x)
+
+# noinspection PyUnusedLocal
+@torch.jit.script
+def altmisha_jit(x, inplace=False):
+	return x.tanh().mul(F.softplus(x))
+
+# AltMish: Alternative B considered in mish paper (https://arxiv.org/pdf/1908.08681.pdf)
+class AltMishB(nn.Module):
+
+	__constants__ = ['inplace']
+	inplace: bool  # Ignored
+
+	def __init__(self, inplace=False):
+		super().__init__()
+		self.inplace = inplace
+
+	# noinspection PyMethodMayBeStatic
+	def forward(self, x):
+		return altmishb_jit(x)
+
+# noinspection PyUnusedLocal
+@torch.jit.script
+def altmishb_jit(x, inplace=False):
+	return x.mul((x.exp().tanh() + 1).log())  # Note: This probably has some numerical gradient issues due to log-of-exp scenario
+
 # ReLish: C1 version, alpha = 1, beta = 1, gamma = 1
 class ReLishA(nn.Module):
 
@@ -240,7 +278,6 @@ class ReLishP2(nn.Module):
 #
 
 # TODO: Update the sweep files with the new palette of activation functions
-# TODO: tanh(x)*log(1+exp(x)), x*log(1 + tanh(exp(x))) (CAREFUL WITH POSSIBLE GRADIENT STABILITY ISSUES)
 # TODO: Aria-2, Bent's Identity, SQNL, ELisH, Hard ELisH, SReLU, ISRU, ISRLU, Flatten T-Swish, SineReLU, Weighted Tanh, LeCun's Tanh
 
 # Activation function factory map
@@ -271,6 +308,8 @@ act_func_factory_map = {
 	'hardtanh': nn.Hardtanh,
 	'softsign': lambda inplace=False, **kwargs: nn.Softsign(**kwargs),
 	'softplus': lambda inplace=False, **kwargs: nn.Softplus(beta=1, **kwargs),
+	'altmisha': AltMishA,
+	'altmishb': AltMishB,
 	'relisha': ReLishA,
 	'relishb': ReLishB,
 	'relishc': ReLishC,
