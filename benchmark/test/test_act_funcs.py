@@ -66,6 +66,10 @@ def compare_act_funcs(device: Union[str, torch.device] = 'cuda'):
 	compare_act_func_pair('relisha', 'relishg1-1-1-1', device=device)
 	compare_act_func_pair('relishb', 'relishg2-2-1-1', device=device, dtol_factor=3)  # Note: relishb has slightly better true numerical accuracy
 	compare_act_func_pair('relishc', 'relishg2-1-1-1', device=device)
+	compare_act_func_pair('relishp1-ppp', 'relishg1-1-1-1', device=device)
+	compare_act_func_pair('relishp2-ppp', 'relishg2-1-1-1', device=device)
+	compare_act_func_pair('relishp1-ppp', 'relisha', device=device)
+	compare_act_func_pair('relishp2-ppp', 'relishc', device=device)
 
 # Compare a pair of activation function implementations that should be equivalent
 def compare_act_func_pair(name_a, name_b, kwargs_a=None, kwargs_b=None, device: Union[str, torch.device] = 'cuda', dtol_factor=1.0):

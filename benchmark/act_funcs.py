@@ -193,6 +193,48 @@ def relishg2_jit(x, alpha=1.0, beta=1.0, gamma=1.0, inplace=False):
 	gammax = x.mul(gamma)
 	return gammax.mul(alpha).div(x.mul(beta).cosh().mul(2) + (alpha - 2)).where(x < 0, gammax)
 
+# ReLish: Parameterised C1 version
+class ReLishP1(nn.Module):
+
+	__constants__ = ['inplace']
+	inplace: bool  # Ignored
+
+	def __init__(self, alpha=True, beta=True, gamma=True, inplace=False, device=None, dtype=None):
+		super().__init__()
+		self.inplace = inplace
+		factory_kwargs = {'device': device, 'dtype': dtype}
+		self.alpha = nn.Parameter(torch.tensor(1.0, **factory_kwargs)) if alpha else 1.0
+		self.beta = nn.Parameter(torch.tensor(1.0, **factory_kwargs)) if beta else 1.0
+		self.gamma = nn.Parameter(torch.tensor(1.0, **factory_kwargs)) if gamma else 1.0
+
+	# noinspection PyMethodMayBeStatic
+	def forward(self, x):
+		return relishg1_jit(x, alpha=self.alpha, beta=self.beta, gamma=self.gamma)
+
+	def extra_repr(self):
+		return f"alpha={'param' if isinstance(self.alpha, nn.Parameter) else self.alpha}, beta={'param' if isinstance(self.beta, nn.Parameter) else self.beta}, gamma={'param' if isinstance(self.gamma, nn.Parameter) else self.gamma}"
+
+# ReLish: Parameterised C2 version
+class ReLishP2(nn.Module):
+
+	__constants__ = ['inplace']
+	inplace: bool  # Ignored
+
+	def __init__(self, alpha=True, beta=True, gamma=True, inplace=False, device=None, dtype=None):
+		super().__init__()
+		self.inplace = inplace
+		factory_kwargs = {'device': device, 'dtype': dtype}
+		self.alpha = nn.Parameter(torch.tensor(1.0, **factory_kwargs)) if alpha else 1.0
+		self.beta = nn.Parameter(torch.tensor(1.0, **factory_kwargs)) if beta else 1.0
+		self.gamma = nn.Parameter(torch.tensor(1.0, **factory_kwargs)) if gamma else 1.0
+
+	# noinspection PyMethodMayBeStatic
+	def forward(self, x):
+		return relishg2_jit(x, alpha=self.alpha, beta=self.beta, gamma=self.gamma)
+
+	def extra_repr(self):
+		return f"alpha={'param' if isinstance(self.alpha, nn.Parameter) else self.alpha}, beta={'param' if isinstance(self.beta, nn.Parameter) else self.beta}, gamma={'param' if isinstance(self.gamma, nn.Parameter) else self.gamma}"
+
 #
 # Utilities
 #
@@ -236,8 +278,10 @@ act_func_factory_map = {
 act_func_extra_map = {
 	'leakyrelu': ('leakyrelu-0.01', 'leakyrelu-0.05', 'leakyrelu-0.25'),
 	'eswish': ('eswish-1.25', 'eswish-1.5', 'eswish-1.75'),
-	'relishg1': ('relishg1-0.8-0.7-1.25',),  # TODO: What are good default parameter sets?
-	'relishg2': ('relishg2-0.8-0.7-1.25',),  # TODO: What are good default parameter sets?
+	'relishg1': ('relishg1-0.55-0.91-1.5',),
+	'relishg2': ('relishg2-0.55-0.91-1.5',),
+	'relishp1': ('relishp1-ppf', 'relishp1-ffp', 'relishp1-ppp'),
+	'relishp2': ('relishp2-ppf', 'relishp2-ffp', 'relishp2-ppp'),
 }
 act_funcs = tuple(itertools.chain(act_func_factory_map.keys(), itertools.chain.from_iterable(act_func_extra_map.values())))
 
@@ -248,10 +292,10 @@ def get_act_func_factory(name):
 	if factory is not None:
 		return factory
 	elif name.startswith('leakyrelu-'):
-		negative_slope = util.parse_value(name[10:], default=0.01, error="Invalid leaky ReLU negative slope specification")  # Common values: 0.01, 0.05, 0.25
+		negative_slope = util.parse_value(name[10:], default=0.01, error="Invalid leaky ReLU negative slope specification")
 		return functools.partial(nn.LeakyReLU, negative_slope=negative_slope)
 	elif name.startswith('eswish-'):
-		beta = util.parse_value(name[7:], default=1.25, error="Invalid E-swish beta specification")  # Common values: 1.25, 1.50, 1.75
+		beta = util.parse_value(name[7:], default=1.25, error="Invalid E-swish beta specification")
 		return functools.partial(ESwish, beta=beta)
 	elif name.startswith('relishg1-'):
 		params = name[9:].split('-')
@@ -265,6 +309,16 @@ def get_act_func_factory(name):
 		beta = util.parse_value(params[1] if len(params) >= 2 else None, default=1.0, error="Invalid ReLish G2 beta specification")
 		gamma = util.parse_value(params[2] if len(params) >= 3 else None, default=1.0, error="Invalid ReLish G2 gamma specification")
 		return functools.partial(ReLishG2, alpha=alpha, beta=beta, gamma=gamma)
+	elif name.startswith('relishp1-'):
+		if len(name) != 12 or any(c not in 'fp' for c in name[9:]):
+			raise ValueError("Invalid ReLish P1 specification")
+		alpha, beta, gamma = (c == 'p' for c in name[9:])
+		return functools.partial(ReLishP1, alpha=alpha, beta=beta, gamma=gamma)
+	elif name.startswith('relishp2-'):
+		if len(name) != 12 or any(c not in 'fp' for c in name[9:]):
+			raise ValueError("Invalid ReLish P2 specification")
+		alpha, beta, gamma = (c == 'p' for c in name[9:])
+		return functools.partial(ReLishP2, alpha=alpha, beta=beta, gamma=gamma)
 	else:
 		raise ValueError(f"Invalid activation function specification: {name}")
 # EOF
