@@ -2,7 +2,7 @@ program: train_cls.py
 project: cls_mnist
 method: random
 metric:
-  goal: minimize
+  goal: maximize
   name: valid_top1_max
 parameters:
   dataset:
