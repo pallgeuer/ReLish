@@ -1,0 +1,20 @@
+program: train_cls.py
+project: cls_cifar100
+method: grid
+metric:
+  goal: maximize
+  name: valid_top1_max
+parameters:
+  count:
+    min: 1
+    max: 5
+  dataset:
+    value: CIFAR100
+  act_func:
+    value: original
+  model:
+    values: resnet34-4
+  epochs:
+    value: 120
+  batch_size:
+    value: 64
