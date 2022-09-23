@@ -158,6 +158,11 @@ TRAIN CLASSIFICATION MODEL
 	wandb sweep sweep/cls_SWEEPNAME.yaml
 	<WANDB AGENT COMMAND FROM ABOVE OUTPUT>  # [--count NUM]
 
+- Calculate result statistics:
+	cd "$RELISH_DIR"/benchmark/results
+	conda activate $ENV
+	./mean_stats_table.py --project ReLish --any_tags cifar10_act_func --metric valid_top1_max --group_by act_func
+
 - Train all classification model sweeps (excluding ImageNet1K):
 	cd "$RELISH_DIR"/benchmark
 	conda activate $ENV

@@ -83,7 +83,7 @@ def main():
 	for metrics in grouped_metrics.values():
 		metrics.sort()
 
-	table_rows = {}
+	table_rows = []
 	model_width = max((len(group) for group in grouped_metrics), default=8)
 	for group, metrics_all in grouped_metrics.items():
 		num_metrics_all = len(metrics_all)
@@ -95,10 +95,12 @@ def main():
 		c4 = math.sqrt(2 / (num_metrics - 1)) * math.gamma(num_metrics / 2) / math.gamma((num_metrics - 1) / 2)
 		metric_stderr = metric_std / (c4 * math.sqrt(num_metrics))
 		metric_ci = (metric_mean - 1.96 * metric_stderr, metric_mean + 1.96 * metric_stderr)
-		table_rows[metric_mean] = f"{group:<{model_width}s}  {metric_mean:>6.2%}  {metric_std:>6.3%}  {metric_stderr:>6.3%}  {f'{100 * metric_ci[0]:.2f}-{metric_ci[1]:.2%}':>12s}  {num_metrics}/{num_metrics_all}"
+		table_rows.append((metric_mean, -metric_std, f"| {group:<{model_width}s} | {metric_mean:>7.2%} | {metric_std:>7.3%} | {metric_stderr:>7.3%} | {f'{100 * metric_ci[0]:.2f}-{metric_ci[1]:.2%}':>14s} | {f'{num_metrics}/{num_metrics_all}':>5s} |"))
+	table_rows.sort(reverse=True)
 
-	print(f"{'Model':<{model_width}s}  {'Mean':>6s}  {'Std':>6s}  {'StdErr':>6s}  {'95% CI':>12s}  N")
-	for _, row in sorted(table_rows.items(), reverse=True):
+	print(f"| {'Model':<{model_width}s} | {'Mean':>7s} | {'Std':>7s} | {'StdErr':>7s} | {'95% CI':>14s} | {'N':>5s} |")
+	print(f"|-{'-' * model_width}:|:{'-' * 7}:|:{'-' * 7}:|:{'-' * 7}:|:{'-' * 14}:|:{'-' * 5}:|")
+	for _, _, row in table_rows:
 		print(row)
 
 # Argparse action that stores values into a sub-namespace
