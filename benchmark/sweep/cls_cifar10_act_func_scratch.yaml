@@ -11,7 +11,7 @@ parameters:
   dataset:
     value: CIFAR10
   act_func:
-    values: ['relu', 'relishp2-fff', 'relishp2-ffp', 'relishp2-fpf', 'relishp2-fpp', 'relishp2-pff', 'relishp2-pfp', 'relishp2-ppf', 'relishp2-ppp']
+    values: ['relu']
   model:
     value: wide2_resnet14_g3
   epochs:
