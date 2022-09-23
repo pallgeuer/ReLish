@@ -13,7 +13,7 @@ parameters:
   act_func:
     value: original
   model:
-    values: resnet34-4
+    value: resnet34-4
   epochs:
     value: 120
   batch_size:
