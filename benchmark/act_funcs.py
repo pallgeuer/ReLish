@@ -78,6 +78,30 @@ class SwishBeta(nn.Module):
 def swish_beta(x, beta, inplace=False):
 	return x.mul(x.mul(beta).sigmoid())
 
+# PSwish: Mix of SwishBeta and E-swish
+class PSwish(nn.Module):
+
+	__constants__ = ['inplace']
+	inplace: bool  # Ignored
+
+	def __init__(self, beta=True, gamma=True, inplace=False, device=None, dtype=None):
+		super().__init__()
+		self.inplace = inplace
+		factory_kwargs = {'device': device, 'dtype': dtype}
+		self.beta = nn.Parameter(torch.tensor(1.0, **factory_kwargs)) if beta else 1.0
+		self.gamma = nn.Parameter(torch.tensor(1.5, **factory_kwargs)) if gamma else 1.5
+
+	def forward(self, x):
+		return pswish(x, self.beta, self.gamma)
+
+	def extra_repr(self):
+		return f"beta={'param' if isinstance(self.beta, nn.Parameter) else self.beta}, gamma={'param' if isinstance(self.gamma, nn.Parameter) else self.gamma}"
+
+# noinspection PyUnusedLocal
+@torch.jit.script
+def pswish(x, beta, gamma, inplace=False):
+	return x.mul(x.mul(beta).sigmoid().mul(gamma))
+
 # AltMish: Alternative A considered in mish paper (https://arxiv.org/pdf/1908.08681.pdf)
 class AltMishA(nn.Module):
 
@@ -317,6 +341,7 @@ act_func_factory_map = {
 act_func_extra_map = {
 	'leakyrelu': ('leakyrelu-0.01', 'leakyrelu-0.05', 'leakyrelu-0.25'),
 	'eswish': ('eswish-1.25', 'eswish-1.5', 'eswish-1.75'),
+	'pswish': ('pswish-pf', 'pswish-fp', 'pswish-pp'),
 	'relishg1': ('relishg1-0.55-0.91-1.5',),
 	'relishg2': ('relishg2-0.55-0.91-1.5',),
 	'relishp1': ('relishp1-ppf', 'relishp1-ffp', 'relishp1-ppp'),
@@ -336,6 +361,11 @@ def get_act_func_factory(name):
 	elif name.startswith('eswish-'):
 		beta = util.parse_value(name[7:], default=1.25, error="Invalid E-swish beta specification")
 		return functools.partial(ESwish, beta=beta)
+	elif name.startswith('pswish-'):
+		if len(name) != 9 or any(c not in 'fp' for c in name[7:]):
+			raise ValueError("Invalid pswish specification")
+		beta, gamma = (c == 'p' for c in name[7:])
+		return functools.partial(PSwish, beta=beta, gamma=gamma)
 	elif name.startswith('relishg1-'):
 		params = name[9:].split('-')
 		alpha = util.parse_value(params[0] if len(params) >= 1 else None, default=1.0, error="Invalid ReLish G1 alpha specification")
