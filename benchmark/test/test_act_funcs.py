@@ -60,6 +60,7 @@ def compare_act_funcs(device: Union[str, torch.device] = 'cuda'):
 	compare_act_func_pair('prelu', 'leakyrelu-0.25', device=device)
 	compare_act_func_pair('elu', 'celu', kwargs_b=dict(alpha=1.0), device=device)
 	compare_act_func_pair('eswish-1', 'swish-beta', device=device)
+	compare_act_func_pair('pswish-ff', 'eswish-1.5', device=device)
 	compare_act_func_pair('pswish-pp', 'eswish-1.5', device=device)
 	compare_act_func_pair('silu', 'eswish-1', device=device)
 	compare_act_func_pair('silu', 'swish-beta', device=device)
