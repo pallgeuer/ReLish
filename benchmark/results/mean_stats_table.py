@@ -92,7 +92,7 @@ def main():
 		num_metrics = len(metrics)
 		metric_mean = metrics.mean().item()
 		metric_std = metrics.std().item()
-		c4 = math.sqrt(2 / (num_metrics - 1)) * math.gamma(num_metrics / 2) / math.gamma((num_metrics - 1) / 2)
+		c4 = math.sqrt(2 / (num_metrics - 1)) * math.gamma(num_metrics / 2) / math.gamma((num_metrics - 1) / 2) if num_metrics > 1 else 1
 		metric_stderr = metric_std / (c4 * math.sqrt(num_metrics))
 		metric_ci = (metric_mean - 1.96 * metric_stderr, metric_mean + 1.96 * metric_stderr)
 		table_rows.append((metric_mean, -metric_std, f"| {group:<{model_width}s} | {metric_mean:>7.2%} | {metric_std:>7.3%} | {metric_stderr:>7.3%} | {f'{100 * metric_ci[0]:.2f}-{metric_ci[1]:.2%}':>14s} | {f'{num_metrics}/{num_metrics_all}':>5s} |"))
