@@ -42,6 +42,7 @@ def main():
 	parser.add_argument('--lr_scale', type=float, default=1.0, metavar='SCALE', help='Learning rate scale relative to the default value')
 	parser.add_argument('--loss', type=str, default='nllloss', metavar='NAME', help='Loss function (default: %(default)s)')
 	parser.add_argument('--epochs', type=int, default=80, metavar='NUM', help='Number of epochs to train (default: %(default)s)')
+	parser.add_argument('--warmup_epochs', type=int, default=0, metavar='NUM', help='Number of linear learning rate warmup epochs (default: %(default)s)')
 	parser.add_argument('--batch_size', type=int, default=64, metavar='SIZE', help='Training batch size (default: %(default)s)')
 	parser.add_argument('--device', type=str, default='cuda', metavar='DEVICE', help='PyTorch device to run on (default: %(default)s)')
 	parser.add_argument('--no_cudnn_bench', action='store_true', help='Disable cuDNN benchmark mode to save memory over speed')
@@ -340,6 +341,7 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 	cpu_device = torch.device('cpu')
 	amp_enabled = not C.no_amp and device.type == 'cuda'
 	scaler = torch.cuda.amp.GradScaler(enabled=amp_enabled)
+	warmup_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1 / (C.warmup_epochs + 1), end_factor=1, total_iters=C.warmup_epochs) if C.warmup_epochs >= 1 else None
 
 	wandb.log(dict(
 		hostname=os.uname().nodename,
@@ -444,6 +446,8 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 		print(f"\x1b[2K\rValidated {num_valid_samples} samples in {num_valid_batches} batches in time {util.format_duration(detail_stamp - init_detail_stamp)}")
 		print(f"Validation results: Mean loss {valid_loss:#.4g}, Top-k ({', '.join(f'{topk:.2%}' for topk in reversed(valid_topk))})")
 
+		if warmup_scheduler:
+			warmup_scheduler.step()
 		scheduler.step()
 
 		end_stamp = timeit.default_timer()
