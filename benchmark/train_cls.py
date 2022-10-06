@@ -277,7 +277,16 @@ def load_model(C, num_classes, in_shape, details=False):
 				models.replace_conv2d(model.features[6][0].block[1], '0', dict(stride=(1, 1)))
 			if model.features[1][0].stochastic_depth.p == 0.0:
 				models.replace_submodule(model.features[1][0], 'stochastic_depth', models.Clone, (), {})  # Note: Solves autograd error when using ReLU (ReLU saves output tensor for backward pass, which is modified in-place by '+=' if stochastic depth has p = 0, which the very first stochastic depth does)
-		elif is_convnext or is_swin:
+		elif is_convnext:
+			downscale = parse_model_variant(default=32)
+			models.replace_conv2d(model.features[0], '0', dict(in_channels=in_channels, stride=(stride := (1, 1) if downscale < 16 else (2, 2) if downscale < 32 else (4, 4)), kernel_size=stride))
+			if downscale < 8:
+				models.replace_conv2d(model.features[2], '1', dict(stride=(1, 1), kernel_size=(1, 1)))
+			if downscale < 4:
+				models.replace_conv2d(model.features[4], '1', dict(stride=(1, 1), kernel_size=(1, 1)))
+			if downscale < 2:
+				models.replace_conv2d(model.features[6], '1', dict(stride=(1, 1), kernel_size=(1, 1)))
+		elif is_swin:
 			models.replace_conv2d(model.features[0], '0', dict(in_channels=in_channels))
 		elif is_vit:
 			models.replace_conv2d(model, 'conv_proj', dict(in_channels=in_channels))
