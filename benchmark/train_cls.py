@@ -366,7 +366,7 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 	output_nans = 0
 	min_train_loss = math.inf
 	min_valid_loss = math.inf
-	
+
 	wandb.log(dict(
 		hostname=os.uname().nodename,
 		gpu=re.sub(r'(nvidia|geforce) ', '', torch.cuda.get_device_name(device) if device.type == 'cuda' else str(device), flags=re.IGNORECASE),
