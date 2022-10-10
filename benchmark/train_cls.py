@@ -364,6 +364,9 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 	warmup_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1 / (C.warmup_epochs + 1), end_factor=1, total_iters=C.warmup_epochs) if C.warmup_epochs >= 1 else None
 
 	output_nans = 0
+	min_train_loss = math.inf
+	min_valid_loss = math.inf
+	
 	wandb.log(dict(
 		hostname=os.uname().nodename,
 		gpu=re.sub(r'(nvidia|geforce) ', '', torch.cuda.get_device_name(device) if device.type == 'cuda' else str(device), flags=re.IGNORECASE),
@@ -386,7 +389,6 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 		num_train_batches = len(train_loader)
 		num_train_samples = 0
 		train_loss = 0
-		min_train_loss = math.inf
 		train_topk = [0] * 5
 		init_detail_stamp = last_detail_stamp = timeit.default_timer()
 
@@ -435,7 +437,6 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 		num_valid_batches = len(valid_loader)
 		num_valid_samples = 0
 		valid_loss = 0
-		min_valid_loss = math.inf
 		valid_topk = [0] * 5
 		init_detail_stamp = last_detail_stamp = timeit.default_timer()
 
