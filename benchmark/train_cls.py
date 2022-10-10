@@ -384,6 +384,7 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 		num_train_batches = len(train_loader)
 		num_train_samples = 0
 		train_loss = 0
+		min_train_loss = math.inf
 		train_topk = [0] * 5
 		init_detail_stamp = last_detail_stamp = timeit.default_timer()
 
@@ -413,10 +414,12 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 				print(f"\x1b[2K\r --> [{util.format_duration(detail_stamp - init_detail_stamp)}] Trained {(batch_num + 1) / num_train_batches:.1%}: Mean loss {train_loss / num_train_samples:#.4g}, Top-k ({', '.join(f'{topk / num_train_samples:.2%}' for topk in reversed(train_topk))})", end='')
 
 		train_loss /= num_train_samples
+		if train_loss < min_train_loss or math.isnan(train_loss):
+			min_train_loss = train_loss
 		for k in range(5):
 			train_topk[k] /= num_train_samples
 
-		log.update(train_loss=train_loss)
+		log.update(train_loss=train_loss, min_train_loss=min_train_loss)
 		for k in range(5):
 			log[f'train_top{k + 1}'] = train_topk[k]
 
@@ -428,6 +431,7 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 		num_valid_batches = len(valid_loader)
 		num_valid_samples = 0
 		valid_loss = 0
+		min_valid_loss = math.inf
 		valid_topk = [0] * 5
 		init_detail_stamp = last_detail_stamp = timeit.default_timer()
 
@@ -454,11 +458,13 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 					print(f"\x1b[2K\r --> [{util.format_duration(detail_stamp - init_detail_stamp)}] Validated {(batch_num + 1) / num_valid_batches:.1%}: Mean loss {valid_loss / num_valid_samples:#.4g}, Top-k ({', '.join(f'{topk / num_valid_samples:.2%}' for topk in reversed(valid_topk))})", end='')
 
 		valid_loss /= num_valid_samples
+		if valid_loss < min_valid_loss or math.isnan(valid_loss):
+			min_valid_loss = valid_loss
 		for k in range(5):
 			valid_topk[k] /= num_valid_samples
 			valid_topk_max[k] = max(valid_topk_max[k], valid_topk[k])
 
-		log.update(valid_loss=valid_loss)
+		log.update(valid_loss=valid_loss, min_valid_loss=min_valid_loss)
 		for k in range(5):
 			log[f'valid_top{k + 1}'] = valid_topk[k]
 			log[f'valid_top{k + 1}_max'] = valid_topk_max[k]
