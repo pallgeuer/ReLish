@@ -363,12 +363,14 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 	scaler = torch.cuda.amp.GradScaler(enabled=amp_enabled)
 	warmup_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1 / (C.warmup_epochs + 1), end_factor=1, total_iters=C.warmup_epochs) if C.warmup_epochs >= 1 else None
 
+	output_nans = 0
 	wandb.log(dict(
 		hostname=os.uname().nodename,
 		gpu=re.sub(r'(nvidia|geforce) ', '', torch.cuda.get_device_name(device) if device.type == 'cuda' else str(device), flags=re.IGNORECASE),
 		epoch=0,
 		params=sum(p.numel() for p in model.parameters()),
 		params_grad=sum(p.numel() for p in model.parameters() if p.requires_grad),
+		output_nans=output_nans,
 	))
 
 	init_epoch_stamp = epoch_stamp = timeit.default_timer()
@@ -403,7 +405,9 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 			scaler.update()
 
 			num_train_samples += num_in_batch
-			batch_topk_sum = calc_topk_sum(output.to(device=cpu_device, dtype=float), target_cpu, topn=5)
+			output_cpu = output.detach().to(device=cpu_device, dtype=float)
+			output_nans += torch.count_nonzero(output_cpu.isnan()).item()
+			batch_topk_sum = calc_topk_sum(output_cpu, target_cpu, topn=5)
 			for k in range(5):
 				train_topk[k] += batch_topk_sum[k]
 			train_loss += mean_batch_loss.item() * num_in_batch
@@ -447,7 +451,9 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 					mean_batch_loss = criterion(output if output_layer is None else output_layer(output), target)
 
 				num_valid_samples += num_in_batch
-				batch_topk_sum = calc_topk_sum(output.to(device=cpu_device, dtype=float), target_cpu, topn=5)
+				output_cpu = output.detach().to(device=cpu_device, dtype=float)
+				output_nans += torch.count_nonzero(output_cpu.isnan()).item()
+				batch_topk_sum = calc_topk_sum(output_cpu, target_cpu, topn=5)
 				for k in range(5):
 					valid_topk[k] += batch_topk_sum[k]
 				valid_loss += mean_batch_loss.item() * num_in_batch
@@ -482,6 +488,7 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 		log.update(epoch_time=epoch_time)
 		epoch_stamp = end_stamp
 
+		log.update(output_nans=output_nans)
 		wandb.log(log)
 
 # Calculate summed topk accuracies for a batch
