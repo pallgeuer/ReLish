@@ -59,6 +59,7 @@ Classification Datasets
 
 Classification Models
 =====================
+Note: Number of parameters is affected by the number of input/output channels required for the dataset
 Note: Number of parameters is evaluated for CIFAR10 (3 input channels, 10 output classes)
 
 - FCNet:
@@ -72,7 +73,7 @@ Note: Number of parameters is evaluated for CIFAR10 (3 input channels, 10 output
 	727,626 = squeezenetp   (downscale /1-16 based on variant, default /16)
 	727,626 = squeezenet1_1 (downscale /16 plus extra no-padding losses)
 
-- ResNet (downscale /32):
+- ResNet (downscale /1-32 based on variant, default /32):
 	 11,181,642 = resnet18
 	 21,289,802 = resnet34
 	 23,000,394 = resnext50_32x4d
@@ -109,26 +110,32 @@ Note: Number of parameters is evaluated for CIFAR10 (3 input channels, 10 output
 	67,375,194 = wide6_resnet42_g4
 	69,604,314 = wide8_resnet26_g4
 
-- EfficientNet (downscale /32):
+- EfficientNet (downscale /1-32 based on variant, default /32):
 	 20,190,298 = efficientnet_v2_s
 	 52,871,166 = efficientnet_v2_m
 	117,247,082 = efficientnet_v2_l
 
-- ConvNeXt (downscale /32):
+- ConvNeXt (downscale /1-32 based on variant, default /32, downscale affects num params due to kernel size changes):
 	 27,827,818 = convnext_tiny
 	 49,462,378 = convnext_small
 	 87,576,714 = convnext_base
 	196,245,706 = convnext_large
 
-- Swin Transformer (downscale /32):
+- Swin Transformer (downscale /1-32 based on variant, default /32, downscale affects num params due to kernel size changes):
 	 27,527,044 = swin_t
 	 48,844,948 = swin_s
 	 86,753,474 = swin_b
 	195,010,846 = swin_l
 
-- Vision Transformer:
-	 85,806,346 = vit_b_16 (16x16 patches)
-	 87,462,922 = vit_b_32 (32x32 patches)
-	303,311,882 = vit_l_16 (16x16 patches)
-	305,520,650 = vit_l_32 (32x32 patches)
-	630,777,610 = vit_h_14 (14x14 patches)
+- Vision Transformer (downscale /1-32 based on variant, default /16, downscale significantly affects num params due to kernel size changes and hidden dimension changes, num params also depends explicitly on input image size via the position embedding parameters):
+	 21,342,346 = vit_b-4
+	 47,994,058 = vit_b-8
+	 85,658,890 = vit_b-16 = vit_b
+	 87,426,058 = vit_b-32
+	 75,722,250 = vit_l-4
+	170,280,202 = vit_l-8
+	303,115,274 = vit_l-16 = vit_l
+	305,471,498 = vit_l-32
+	157,633,930 = vit_h-4
+	354,507,850 = vit_h-8
+	630,931,210 = vit_h-16 = vit_h
