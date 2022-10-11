@@ -215,7 +215,7 @@ def load_model(C, num_classes, in_shape, details=False):
 	is_wideresnet = model_type in ('wide1_resnet14_g3', 'wide2_resnet14_g3', 'wide4_resnet14_g3', 'wide8_resnet14_g3', 'wide1_resnet20_g3', 'wide2_resnet20_g3', 'wide8_resnet20_g3', 'wide10_resnet26_g3', 'wide2_resnet32_g3', 'wide4_resnet38_g3', 'wide10_resnet38_g3', 'wide1_resnet18_g4', 'wide2_resnet18_g4', 'wide4_resnet18_g4', 'wide8_resnet18_g4', 'wide1_resnet26_g4', 'wide2_resnet26_g4', 'wide8_resnet26_g4', 'wide6_resnet34_g4', 'wide6_resnet42_g4', 'wide4_resnet50_g4')
 	is_efficientnet = model_type in ('efficientnet_v2_s', 'efficientnet_v2_m', 'efficientnet_v2_l')
 	is_convnext = model_type in ('convnext_tiny', 'convnext_small', 'convnext_base', 'convnext_large')
-	is_vit = model_type in ('vit_b_16', 'vit_b_32', 'vit_l_16', 'vit_l_32', 'vit_h_14')
+	is_vit = model_type in ('vit_b', 'vit_l', 'vit_h')
 	is_swin = model_type in ('swin_t', 'swin_s', 'swin_b', 'swin_l')
 
 	if C.act_func == 'original':
@@ -225,7 +225,7 @@ def load_model(C, num_classes, in_shape, details=False):
 		act_func_class = act_func_factory().__class__
 	in_channels = in_shape[0]
 
-	if is_squeezenet or is_resnet or is_efficientnet or is_convnext or is_swin or is_vit:
+	if is_squeezenet or is_resnet or is_efficientnet or is_convnext or is_swin:
 		model_factory = getattr(torchvision.models, model_type, getattr(models, model_type, None))
 		if model_factory is None or not model_type.islower() or model_type.startswith('_') or not callable(model_factory):
 			raise ValueError(f"Invalid torchvision/models model type: {model_type}")
@@ -237,6 +237,18 @@ def load_model(C, num_classes, in_shape, details=False):
 	elif is_wideresnet:
 		match = re.fullmatch(r'wide(\d+)_resnet(\d+)_g(\d+)', model_type)
 		model = models.WideResNet(num_classes=num_classes, in_channels=in_channels, width=int(match.group(1)), depth=int(match.group(2)), groups=int(match.group(3)), act_func_factory=act_func_factory)
+	elif is_vit:
+		if in_shape[1] != in_shape[2]:
+			raise ValueError("Vision transformer needs square input image size")
+		image_size = in_shape[1]
+		downscale = parse_model_variant(default=16)
+		vit_props = {'vit_b': (12, 12, 768), 'vit_l': (24, 16, 1024), 'vit_h': (32, 16, 1280)}
+		num_layers, num_heads, hidden_dim = vit_props[model_type]
+		if 4 < downscale <= 8:
+			hidden_dim = (3 * hidden_dim) // 4
+		elif downscale <= 4:
+			hidden_dim //= 2
+		model = torchvision.models.VisionTransformer(image_size=image_size, patch_size=downscale, num_layers=num_layers, num_heads=num_heads, hidden_dim=hidden_dim, mlp_dim=4 * hidden_dim, num_classes=num_classes)
 	else:
 		raise ValueError(f"Invalid model type: {model_type}")
 
