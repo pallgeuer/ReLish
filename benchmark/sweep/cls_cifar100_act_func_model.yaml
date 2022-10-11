@@ -10,7 +10,7 @@ parameters:
   act_func:
     values: ['relu', 'silu', 'mish']
   model:
-    values: ['resnet18-4', 'resnet34-4', 'resnext50_32x4d-4', 'resnet50-4', 'resnet101-4', 'resnet152-4', 'wide_resnet50_2-4', 'resnext101_64x4d-4', 'wide1_resnet14_g3', 'wide1_resnet20_g3', 'wide2_resnet14_g3', 'wide2_resnet20_g3', 'wide2_resnet32_g3', 'wide4_resnet14_g3', 'wide4_resnet38_g3', 'wide8_resnet14_g3', 'wide8_resnet20_g3', 'wide10_resnet26_g3', 'wide10_resnet38_g3']
+    values: ['resnet18-4', 'resnet34-4', 'resnext50_32x4d-4', 'resnet50-4', 'resnet101-4', 'resnet152-4', 'wide_resnet50_2-4', 'resnext101_64x4d-4', 'wide1_resnet14_g3', 'wide1_resnet20_g3', 'wide2_resnet14_g3', 'wide2_resnet20_g3', 'wide2_resnet32_g3', 'wide4_resnet14_g3', 'wide4_resnet38_g3', 'wide8_resnet14_g3', 'wide8_resnet20_g3', 'wide10_resnet26_g3', 'wide10_resnet38_g3', 'efficientnet_v2_s-4', 'efficientnet_v2_m-4', 'convnext_tiny-4', 'convnext_small-4', 'convnext_base-4', 'swin_t-4', 'swin_s-4', 'swin_b-4', 'vit_b-4', 'vit_l-4']
   epochs:
     value: 120
   batch_size:
