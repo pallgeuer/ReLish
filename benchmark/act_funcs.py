@@ -3,6 +3,7 @@
 # Imports
 import itertools
 import functools
+from typing import Final
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -17,10 +18,9 @@ import util
 #       performance drops to that of the non-scripted versions (or below).
 
 # Mish: https://arxiv.org/pdf/1908.08681.pdf
-class MishJIT(nn.Module):
+class Mish(nn.Module):
 
-	__constants__ = ['inplace']
-	inplace: bool  # Ignored
+	inplace: Final[bool]  # Ignored
 
 	def __init__(self, inplace=False):
 		super().__init__()
@@ -28,23 +28,22 @@ class MishJIT(nn.Module):
 
 	# noinspection PyMethodMayBeStatic
 	def forward(self, x):
-		return mish_jit(x)
+		return mish(x)
 
 # noinspection PyUnusedLocal
 @torch.jit.script
-def mish_jit(x, inplace=False):
+def mish(x: torch.Tensor, inplace: bool = False):
 	return x.mul(F.softplus(x).tanh())
 
 # E-swish: https://arxiv.org/pdf/1801.07145.pdf
 class ESwish(nn.Module):
 
-	__constants__ = ['beta', 'inplace']
-	beta: float
-	inplace: bool  # Ignored
+	beta: Final[float]
+	inplace: Final[bool]  # Ignored
 
 	def __init__(self, beta=1.25, inplace=False):
 		super().__init__()
-		self.beta = beta
+		self.beta = float(beta)
 		self.inplace = inplace
 
 	def forward(self, x):
@@ -55,14 +54,13 @@ class ESwish(nn.Module):
 
 # noinspection PyUnusedLocal
 @torch.jit.script
-def eswish(x, beta=1.25, inplace=False):
+def eswish(x: torch.Tensor, beta: float = 1.25, inplace: bool = False):
 	return x.mul(x.sigmoid().mul(beta))
 
 # SwishBeta: https://arxiv.org/pdf/1710.05941.pdf
 class SwishBeta(nn.Module):
 
-	__constants__ = ['inplace']
-	inplace: bool  # Ignored
+	inplace: Final[bool]  # Ignored
 
 	def __init__(self, init_beta=1.0, inplace=False, device=None, dtype=None):
 		super().__init__()
@@ -75,38 +73,40 @@ class SwishBeta(nn.Module):
 
 # noinspection PyUnusedLocal
 @torch.jit.script
-def swish_beta(x, beta, inplace=False):
+def swish_beta(x: torch.Tensor, beta: torch.Tensor, inplace: bool = False):
 	return x.mul(x.mul(beta).sigmoid())
 
 # PSwish: Mix of SwishBeta and E-swish
 class PSwish(nn.Module):
 
-	__constants__ = ['inplace']
-	inplace: bool  # Ignored
+	beta: torch.Tensor
+	gamma: torch.Tensor
+	inplace: Final[bool]  # Ignored
 
 	def __init__(self, beta=True, gamma=True, inplace=False, device=None, dtype=None):
 		super().__init__()
 		self.inplace = inplace
 		factory_kwargs = {'device': device, 'dtype': dtype}
-		self.beta = nn.Parameter(torch.tensor(1.0, **factory_kwargs)) if beta else 1.0
-		self.gamma = nn.Parameter(torch.tensor(1.5, **factory_kwargs)) if gamma else 1.5
+		beta_tensor = torch.tensor(1.0, **factory_kwargs)
+		gamma_tensor = torch.tensor(1.5, **factory_kwargs)
+		self.beta = nn.Parameter(beta_tensor) if beta else beta_tensor
+		self.gamma = nn.Parameter(gamma_tensor) if gamma else gamma_tensor
 
 	def forward(self, x):
 		return pswish(x, self.beta, self.gamma)
 
 	def extra_repr(self):
-		return f"beta={'param' if isinstance(self.beta, nn.Parameter) else self.beta}, gamma={'param' if isinstance(self.gamma, nn.Parameter) else self.gamma}"
+		return f"beta={'param' if isinstance(self.beta, nn.Parameter) else self.beta.item()}, gamma={'param' if isinstance(self.gamma, nn.Parameter) else self.gamma.item()}"
 
 # noinspection PyUnusedLocal
 @torch.jit.script
-def pswish(x, beta, gamma, inplace=False):
+def pswish(x: torch.Tensor, beta: torch.Tensor, gamma: torch.Tensor, inplace: bool = False):
 	return x.mul(x.mul(beta).sigmoid().mul(gamma))
 
 # AltMish: Alternative A considered in mish paper (https://arxiv.org/pdf/1908.08681.pdf)
 class AltMishA(nn.Module):
 
-	__constants__ = ['inplace']
-	inplace: bool  # Ignored
+	inplace: Final[bool]  # Ignored
 
 	def __init__(self, inplace=False):
 		super().__init__()
@@ -114,18 +114,17 @@ class AltMishA(nn.Module):
 
 	# noinspection PyMethodMayBeStatic
 	def forward(self, x):
-		return altmisha_jit(x)
+		return altmisha(x)
 
 # noinspection PyUnusedLocal
 @torch.jit.script
-def altmisha_jit(x, inplace=False):
+def altmisha(x: torch.Tensor, inplace: bool = False):
 	return x.tanh().mul(F.softplus(x))
 
 # AltMish: Alternative B considered in mish paper (https://arxiv.org/pdf/1908.08681.pdf)
 class AltMishB(nn.Module):
 
-	__constants__ = ['inplace']
-	inplace: bool  # Ignored
+	inplace: Final[bool]  # Ignored
 
 	def __init__(self, inplace=False):
 		super().__init__()
@@ -133,18 +132,17 @@ class AltMishB(nn.Module):
 
 	# noinspection PyMethodMayBeStatic
 	def forward(self, x):
-		return altmishb_jit(x)
+		return altmishb(x)
 
 # noinspection PyUnusedLocal
 @torch.jit.script
-def altmishb_jit(x, inplace=False):
+def altmishb(x: torch.Tensor, inplace: bool = False):
 	return x.mul((x.exp().tanh() + 1).log())  # Note: This probably has some numerical gradient issues due to log-of-exp scenario
 
 # ReLish: C1 version, alpha = 1, beta = 1, gamma = 1
 class ReLishA(nn.Module):
 
-	__constants__ = ['inplace']
-	inplace: bool  # Ignored
+	inplace: Final[bool]  # Ignored
 
 	def __init__(self, inplace=False):
 		super().__init__()
@@ -152,18 +150,18 @@ class ReLishA(nn.Module):
 
 	# noinspection PyMethodMayBeStatic
 	def forward(self, x):
-		return relisha_jit(x)
+		return relisha(x)
 
 # noinspection PyUnusedLocal
 @torch.jit.script
-def relisha_jit(x, inplace=False):
-	return x.mul(x.exp()).where(x < 0, x)
+def relisha(x: torch.Tensor, inplace: bool = False):
+	xneg = torch.minimum(x, torch.zeros_like(x))
+	return x.mul(xneg.exp()).where(x < 0, x)
 
 # ReLish: C2 version, alpha = 2, beta = 1, gamma = 1
 class ReLishB(nn.Module):
 
-	__constants__ = ['inplace']
-	inplace: bool  # Ignored
+	inplace: Final[bool]  # Ignored
 
 	def __init__(self, inplace=False):
 		super().__init__()
@@ -171,18 +169,17 @@ class ReLishB(nn.Module):
 
 	# noinspection PyMethodMayBeStatic
 	def forward(self, x):
-		return relishb_jit(x)
+		return relishb(x)
 
 # noinspection PyUnusedLocal
 @torch.jit.script
-def relishb_jit(x, inplace=False):
+def relishb(x: torch.Tensor, inplace: bool = False):
 	return x.div(x.cosh()).where(x < 0, x)
 
 # ReLish: C2 version, alpha = 1, beta = 1, gamma = 1
 class ReLishC(nn.Module):
 
-	__constants__ = ['inplace']
-	inplace: bool  # Ignored
+	inplace: Final[bool]  # Ignored
 
 	def __init__(self, inplace=False):
 		super().__init__()
@@ -190,112 +187,134 @@ class ReLishC(nn.Module):
 
 	# noinspection PyMethodMayBeStatic
 	def forward(self, x):
-		return relishc_jit(x)
+		return relishc(x)
 
 # noinspection PyUnusedLocal
 @torch.jit.script
-def relishc_jit(x, inplace=False):
+def relishc(x: torch.Tensor, inplace: bool = False):
 	return x.div(x.cosh().mul(2) - 1).where(x < 0, x)
 
 # ReLish: General C1 version
 class ReLishG1(nn.Module):
 
-	__constants__ = ['alpha', 'beta', 'gamma', 'inplace']
-	alpha: float
-	beta: float
-	gamma: float
-	inplace: bool  # Ignored
+	alpha: Final[float]
+	beta: Final[float]
+	gamma: Final[float]
+	inplace: Final[bool]  # Ignored
 
 	def __init__(self, alpha=1.0, beta=1.0, gamma=1.0, inplace=False):
 		super().__init__()
-		self.alpha = alpha
-		self.beta = beta
-		self.gamma = gamma
+		self.alpha = float(alpha)
+		self.beta = float(beta)
+		self.gamma = float(gamma)
 		self.inplace = inplace
 
 	# noinspection PyMethodMayBeStatic
 	def forward(self, x):
-		return relishg1_jit(x, alpha=self.alpha, beta=self.beta, gamma=self.gamma)
+		return relishg1(x, alpha=self.alpha, beta=self.beta, gamma=self.gamma)
 
 	def extra_repr(self):
 		return f"alpha={self.alpha}, beta={self.beta}, gamma={self.gamma}"
 
 # noinspection PyUnusedLocal
 @torch.jit.script
-def relishg1_jit(x, alpha=1.0, beta=1.0, gamma=1.0, inplace=False):
+def relishg1(x: torch.Tensor, alpha: float = 1.0, beta: float = 1.0, gamma: float = 1.0, inplace: bool = False):
 	gammax = x.mul(gamma)
-	return gammax.mul(alpha).div(torch.expm1(x.mul(-beta)) + alpha).where(x < 0, gammax)
+	xneg = torch.minimum(x, torch.zeros_like(x))
+	return gammax.mul(alpha).div(torch.expm1(xneg.mul(-beta)) + alpha).where(x < 0, gammax)
 
 # ReLish: General C2 version
 class ReLishG2(nn.Module):
 
-	__constants__ = ['alpha', 'beta', 'gamma', 'inplace']
-	alpha: float
-	beta: float
-	gamma: float
-	inplace: bool  # Ignored
+	alpha: Final[float]
+	beta: Final[float]
+	gamma: Final[float]
+	inplace: Final[bool]  # Ignored
 
 	def __init__(self, alpha=1.0, beta=1.0, gamma=1.0, inplace=False):
 		super().__init__()
-		self.alpha = alpha
-		self.beta = beta
-		self.gamma = gamma
+		self.alpha = float(alpha)
+		self.beta = float(beta)
+		self.gamma = float(gamma)
 		self.inplace = inplace
 
 	# noinspection PyMethodMayBeStatic
 	def forward(self, x):
-		return relishg2_jit(x, alpha=self.alpha, beta=self.beta, gamma=self.gamma)
+		return relishg2(x, alpha=self.alpha, beta=self.beta, gamma=self.gamma)
 
 	def extra_repr(self):
 		return f"alpha={self.alpha}, beta={self.beta}, gamma={self.gamma}"
 
 # noinspection PyUnusedLocal
 @torch.jit.script
-def relishg2_jit(x, alpha=1.0, beta=1.0, gamma=1.0, inplace=False):
+def relishg2(x: torch.Tensor, alpha: float = 1.0, beta: float = 1.0, gamma: float = 1.0, inplace: bool = False):
 	gammax = x.mul(gamma)
 	return gammax.mul(alpha).div(x.mul(beta).cosh().mul(2) + (alpha - 2)).where(x < 0, gammax)
 
 # ReLish: Parameterised C1 version
 class ReLishP1(nn.Module):
 
-	__constants__ = ['inplace']
-	inplace: bool  # Ignored
+	alpha: torch.Tensor
+	beta: torch.Tensor
+	gamma: torch.Tensor
+	inplace: Final[bool]  # Ignored
 
 	def __init__(self, alpha=True, beta=True, gamma=True, inplace=False, device=None, dtype=None):
 		super().__init__()
 		self.inplace = inplace
 		factory_kwargs = {'device': device, 'dtype': dtype}
-		self.alpha = nn.Parameter(torch.tensor(1.0, **factory_kwargs)) if alpha else 1.0
-		self.beta = nn.Parameter(torch.tensor(1.0, **factory_kwargs)) if beta else 1.0
-		self.gamma = nn.Parameter(torch.tensor(1.0, **factory_kwargs)) if gamma else 1.0
+		alpha_tensor = torch.tensor(1.0, **factory_kwargs)
+		beta_tensor = torch.tensor(1.0, **factory_kwargs)
+		gamma_tensor = torch.tensor(1.0, **factory_kwargs)
+		self.alpha = nn.Parameter(alpha_tensor) if alpha else alpha_tensor
+		self.beta = nn.Parameter(beta_tensor) if beta else beta_tensor
+		self.gamma = nn.Parameter(gamma_tensor) if gamma else gamma_tensor
 
 	# noinspection PyMethodMayBeStatic
 	def forward(self, x):
-		return relishg1_jit(x, alpha=self.alpha, beta=self.beta, gamma=self.gamma)
+		return relishp1(x, self.alpha, self.beta, self.gamma)
 
 	def extra_repr(self):
-		return f"alpha={'param' if isinstance(self.alpha, nn.Parameter) else self.alpha}, beta={'param' if isinstance(self.beta, nn.Parameter) else self.beta}, gamma={'param' if isinstance(self.gamma, nn.Parameter) else self.gamma}"
+		return f"alpha={'param' if isinstance(self.alpha, nn.Parameter) else self.alpha.item()}, beta={'param' if isinstance(self.beta, nn.Parameter) else self.beta.item()}, gamma={'param' if isinstance(self.gamma, nn.Parameter) else self.gamma.item()}"
+
+# noinspection PyUnusedLocal
+@torch.jit.script
+def relishp1(x: torch.Tensor, alpha: torch.Tensor, beta: torch.Tensor, gamma: torch.Tensor, inplace: bool = False):
+	gammax = x.mul(gamma)
+	xneg = torch.minimum(x, torch.zeros_like(x))
+	return gammax.mul(alpha).div(torch.expm1(xneg.mul(-beta)) + alpha).where(x < 0, gammax)
 
 # ReLish: Parameterised C2 version
 class ReLishP2(nn.Module):
 
-	__constants__ = ['inplace']
-	inplace: bool  # Ignored
+	alpha: torch.Tensor
+	beta: torch.Tensor
+	gamma: torch.Tensor
+	inplace: Final[bool]  # Ignored
 
 	def __init__(self, alpha=True, beta=True, gamma=True, inplace=False, device=None, dtype=None):
 		super().__init__()
 		self.inplace = inplace
 		factory_kwargs = {'device': device, 'dtype': dtype}
-		self.alpha = nn.Parameter(torch.tensor(1.0, **factory_kwargs)) if alpha else 1.0
-		self.beta = nn.Parameter(torch.tensor(1.0, **factory_kwargs)) if beta else 1.0
-		self.gamma = nn.Parameter(torch.tensor(1.0, **factory_kwargs)) if gamma else 1.0
+		alpha_tensor = torch.tensor(1.0, **factory_kwargs)
+		beta_tensor = torch.tensor(1.0, **factory_kwargs)
+		gamma_tensor = torch.tensor(1.0, **factory_kwargs)
+		self.alpha = nn.Parameter(alpha_tensor) if alpha else alpha_tensor
+		self.beta = nn.Parameter(beta_tensor) if beta else beta_tensor
+		self.gamma = nn.Parameter(gamma_tensor) if gamma else gamma_tensor
 
 	# noinspection PyMethodMayBeStatic
 	def forward(self, x):
-		return relishg2_jit(x, alpha=self.alpha, beta=self.beta, gamma=self.gamma)
+		return relishp2(x, self.alpha, self.beta, self.gamma)
 
 	def extra_repr(self):
-		return f"alpha={'param' if isinstance(self.alpha, nn.Parameter) else self.alpha}, beta={'param' if isinstance(self.beta, nn.Parameter) else self.beta}, gamma={'param' if isinstance(self.gamma, nn.Parameter) else self.gamma}"
+		return f"alpha={'param' if isinstance(self.alpha, nn.Parameter) else self.alpha.item()}, beta={'param' if isinstance(self.beta, nn.Parameter) else self.beta.item()}, gamma={'param' if isinstance(self.gamma, nn.Parameter) else self.gamma.item()}"
+
+# noinspection PyUnusedLocal
+@torch.jit.script
+def relishp2(x: torch.Tensor, alpha: torch.Tensor, beta: torch.Tensor, gamma: torch.Tensor, inplace: bool = False):
+	gammax = x.mul(gamma)
+	return gammax.mul(alpha).div(x.mul(beta).cosh().mul(2) + (alpha - 2)).where(x < 0, gammax)
 
 #
 # Utilities
@@ -321,7 +340,7 @@ act_func_factory_map = {
 	'swish-beta': SwishBeta,
 	'hardswish': nn.Hardswish,
 	'mish': nn.Mish,
-	'mish-jit': MishJIT,
+	'mish-jit': Mish,
 	'sigmoid': lambda inplace=False, **kwargs: nn.Sigmoid(**kwargs),
 	'hardsigmoid': nn.Hardsigmoid,
 	'logsigmoid': lambda inplace=False, **kwargs: nn.LogSigmoid(**kwargs),
