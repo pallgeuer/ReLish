@@ -1,4 +1,9 @@
 program: train_cls.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - ${args_no_boolean_flags}
 project: cls_tinyimagenet
 method: grid
 metric:
@@ -7,10 +12,12 @@ metric:
 parameters:
   dataset:
     value: TinyImageNet
+  amp:
+    value: true
   act_func:
     values: ['relu', 'silu', 'mish']
   model:
-    value: wide6_resnet34_g4
+    value: resnet101-8
   epochs:
     values: [50, 80, 120, 180]
   batch_size:

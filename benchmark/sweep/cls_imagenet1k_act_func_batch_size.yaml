@@ -1,4 +1,9 @@
 program: train_cls.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - ${args_no_boolean_flags}
 project: cls_imagenet1k
 method: grid
 metric:
@@ -7,10 +12,12 @@ metric:
 parameters:
   dataset:
     value: ImageNet1K
+  amp:
+    value: false
   act_func:
     values: ['relu', 'silu', 'mish']
   model:
-    value: resnet101
+    value: swin_t
   epochs:
     value: 80
   batch_size:

@@ -1,4 +1,9 @@
 program: train_cls.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - ${args_no_boolean_flags}
 project: cls_mnist
 method: random
 metric:
@@ -7,6 +12,8 @@ metric:
 parameters:
   dataset:
     values: ['MNIST', 'FashionMNIST']
+  amp:
+    value: true
   act_func:
     values: ['elu', 'hardshrink', 'hardsigmoid', 'hardtanh', 'hardswish', 'leakyrelu-0.01', 'leakyrelu-0.05', 'leakyrelu-0.25', 'logsigmoid', 'prelu', 'relu', 'relu6', 'rrelu', 'selu', 'celu', 'gelu-exact', 'gelu-approx', 'sigmoid', 'silu', 'mish', 'softplus', 'softshrink', 'softsign', 'tanh', 'tanhshrink', 'threshold']
   model:

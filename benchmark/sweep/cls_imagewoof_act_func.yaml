@@ -1,4 +1,9 @@
 program: train_cls.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - ${args_no_boolean_flags}
 project: cls_imagewoof
 method: grid
 metric:
@@ -7,11 +12,15 @@ metric:
 parameters:
   dataset:
     value: Imagewoof
+  amp:
+    value: false
   act_func:
     values: ['elu', 'hardshrink', 'hardsigmoid', 'hardtanh', 'hardswish', 'leakyrelu-0.01', 'leakyrelu-0.05', 'leakyrelu-0.25', 'logsigmoid', 'prelu', 'relu', 'relu6', 'rrelu', 'selu', 'celu', 'gelu-exact', 'gelu-approx', 'sigmoid', 'silu', 'mish', 'softplus', 'softshrink', 'softsign', 'tanh', 'tanhshrink', 'threshold']
   model:
-    value: resnet50
+    value: resnext50_32x4d
   epochs:
-    value: 120
+    value: 300
   batch_size:
     value: 32
+  lr_scale:
+    value: 3

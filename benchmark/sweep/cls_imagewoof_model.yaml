@@ -1,4 +1,9 @@
 program: train_cls.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - ${args_no_boolean_flags}
 project: cls_imagewoof
 method: grid
 metric:
@@ -7,11 +12,15 @@ metric:
 parameters:
   dataset:
     value: Imagewoof
+  amp:
+    value: false
   act_func:
     value: original
   model:
     values: ['resnet18', 'resnet34', 'resnext50_32x4d', 'resnet50', 'resnet101', 'resnet152', 'wide_resnet50_2', 'resnext101_64x4d', 'efficientnet_v2_s', 'efficientnet_v2_m', 'convnext_tiny', 'convnext_small', 'convnext_base', 'swin_t', 'swin_s', 'swin_b', 'vit_b-16', 'vit_b-32']
   epochs:
-    value: 120
+    value: 300
   batch_size:
     value: 32
+  lr_scale:
+    value: 3

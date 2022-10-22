@@ -1,4 +1,9 @@
 program: train_cls.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - ${args_no_boolean_flags}
 project: cls_imagenette
 method: grid
 metric:
@@ -7,6 +12,8 @@ metric:
 parameters:
   dataset:
     value: Imagenette
+  amp:
+    value: false
   act_func:
     values: ['relu', 'silu', 'mish']
   model:

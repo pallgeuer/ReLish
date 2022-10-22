@@ -142,14 +142,14 @@ TRAIN CLASSIFICATION MODEL
 - Train single classification model:
 	cd "$RELISH_DIR"/benchmark
 	conda activate $ENV
-	./train_cls.py --dataset MNIST --model fcnet
-	./train_cls.py --dataset FashionMNIST --model fcnet
-	./train_cls.py --dataset CIFAR10 --model wide2_resnet14_g3
-	./train_cls.py --dataset CIFAR100 --model resnet34-4
-	./train_cls.py --dataset TinyImageNet --model resnext50_32x4d-8
-	./train_cls.py --dataset Imagenette --model resnet50 TODO: Update with the new defaults
-	./train_cls.py --dataset Imagewoof --model resnet50
-	./train_cls.py --dataset ImageNet1K --model resnet101
+	./train_cls.py --dataset MNIST --model fcnet --epochs 50 --batch_size 64 --amp
+	./train_cls.py --dataset FashionMNIST --model fcnet --epochs 50 --batch_size 64 --amp
+	./train_cls.py --dataset CIFAR10 --model wide2_resnet14_g3 --epochs 80 --batch_size 64 --amp
+	./train_cls.py --dataset CIFAR100 --model resnet34-4 --epochs 120 --batch_size 64 --amp
+	./train_cls.py --dataset TinyImageNet --model resnet101-8 --epochs 120 --batch_size 64 --amp
+	./train_cls.py --dataset Imagenette --model efficientnet_v2_s --epochs 120 --batch_size 32
+	./train_cls.py --dataset Imagewoof --model resnext50_32x4d --epochs 300 --batch_size 32 --lr_scale 3
+	./train_cls.py --dataset ImageNet1K --model swin_t --epochs 80 --batch_size 32
 
 - Train classification model sweep:
 	cd "$RELISH_DIR"/benchmark

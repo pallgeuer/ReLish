@@ -46,7 +46,7 @@ def main():
 	parser.add_argument('--batch_size', type=int, default=64, metavar='SIZE', help='Training batch size (default: %(default)s)')
 	parser.add_argument('--device', type=str, default='cuda', metavar='DEVICE', help='PyTorch device to run on (default: %(default)s)')
 	parser.add_argument('--no_cudnn_bench', action='store_true', help='Disable cuDNN benchmark mode to save memory over speed')
-	parser.add_argument('--no_amp', action='store_true', help='Disable automatic mixed precision training')
+	parser.add_argument('--amp', action='store_true', help='Enable automatic mixed precision training')
 	parser.add_argument('--aaa', type=int, default=1, metavar='NUM', help='Dummy variable that allows sweeps to do multiple passes of grid searches')
 	parser.add_argument('--dry', action='store_true', help='Show what would be done but do not actually run the training')
 	parser.add_argument('--no_wandb', dest='use_wandb', action='store_false', help='Do not use wandb')
@@ -371,7 +371,7 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 	valid_topk_max = [0] * 5
 	device = torch.device(C.device)
 	cpu_device = torch.device('cpu')
-	amp_enabled = not C.no_amp and device.type == 'cuda'
+	amp_enabled = C.amp and device.type == 'cuda'
 	scaler = torch.cuda.amp.GradScaler(enabled=amp_enabled)
 	warmup_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1 / (C.warmup_epochs + 1), end_factor=1, total_iters=C.warmup_epochs) if C.warmup_epochs >= 1 else None
 
