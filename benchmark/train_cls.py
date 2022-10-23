@@ -365,6 +365,8 @@ def load_scheduler(C, optimizer):
 		return torch.optim.lr_scheduler.StepLR(optimizer, step_size=C.epochs + 1, gamma=1.0)
 	elif C.scheduler == 'multisteplr':
 		return torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[round(0.6 * C.epochs), round(0.8 * C.epochs)], gamma=0.1)
+	elif C.scheduler == 'cosinedecay':
+		return torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=C.epochs)
 	else:
 		raise ValueError(f"Invalid learning rate scheduler specification: {C.scheduler}")
 
