@@ -35,6 +35,7 @@ def main():
 	add_filter(parser_config, 'warmup_epochs', int)
 	add_filter(parser_config, 'loss', str)
 	add_filter(parser_config, 'lr_scale', float)
+	add_filter(parser_config, 'wd_scale', float)
 	add_filter(parser_config, 'model', str)
 	add_filter(parser_config, 'amp', bool)
 	add_filter(parser_config, 'no_auto_augment', bool)
@@ -50,8 +51,11 @@ def main():
 
 	args = parser.parse_args()
 
-	if hasattr(args, 'config') and hasattr(args.config, 'lr_scale'):
-		args.config.lr_scale.extend(tuple(int(lrs) for lrs in args.config.lr_scale if lrs.is_integer()))  # Note: Overcome float vs int bug with wandb filters
+	if hasattr(args, 'config'):  # Note: Overcome float vs int bug with wandb filters
+		if hasattr(args.config, 'lr_scale'):
+			args.config.lr_scale.extend(tuple(int(lrs) for lrs in args.config.lr_scale if lrs.is_integer()))
+		if hasattr(args.config, 'wd_scale'):
+			args.config.wd_scale.extend(tuple(int(wds) for wds in args.config.wd_scale if wds.is_integer()))
 
 	args.metric = get_filter_key(args.metric, 'summary_metrics')
 	run_filters = [{'state': 'finished'}, {args.metric: {'$exists': True}}]

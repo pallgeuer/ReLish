@@ -38,6 +38,7 @@ def main():
 	parser.add_argument('--model', type=str, default='resnet18', metavar='MODEL', help='Classification model (default: %(default)s)')
 	parser.add_argument('--act_func', type=str, default='original', metavar='NAME', help='Activation function (default: %(default)s)')
 	parser.add_argument('--optimizer', type=str, default='adam', metavar='NAME', help='Optimizer (default: %(default)s)')
+	parser.add_argument('--wd_scale', type=float, default=1.0, metavar='SCALE', help='Weight decay scale relative to the default value')
 	parser.add_argument('--scheduler', type=str, default='multisteplr', metavar='NAME', help='Learning rate scheduler (default: %(default)s)')
 	parser.add_argument('--lr_scale', type=float, default=1.0, metavar='SCALE', help='Learning rate scale relative to the default value')
 	parser.add_argument('--loss', type=str, default='nllloss', metavar='NAME', help='Loss function (default: %(default)s)')
@@ -350,9 +351,11 @@ def load_criterion(C):
 # Load the optimizer
 def load_optimizer(C, model_params):
 	if C.optimizer == 'sgd':
-		return torch.optim.SGD(model_params, lr=0.1 * C.lr_scale, momentum=0.9, weight_decay=5e-4)
+		return torch.optim.SGD(model_params, lr=0.1 * C.lr_scale, momentum=0.9, weight_decay=5e-4 * C.wd_scale)
 	elif C.optimizer == 'adam':
 		return torch.optim.Adam(model_params, lr=0.001 * C.lr_scale)
+	elif C.optimizer == 'adamw':
+		return torch.optim.AdamW(model_params, lr=0.001 * C.lr_scale, weight_decay=0.05 * C.wd_scale)
 	else:
 		raise ValueError(f"Invalid optimizer specification: {C.optimizer}")
 
