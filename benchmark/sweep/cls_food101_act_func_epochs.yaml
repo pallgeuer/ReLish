@@ -1,0 +1,24 @@
+program: train_cls.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - ${args_no_boolean_flags}
+project: cls_food101
+method: grid
+metric:
+  goal: maximize
+  name: valid_top1_max
+parameters:
+  dataset:
+    value: Food101
+  amp:
+    value: false
+  act_func:
+    values: ['relu', 'silu', 'mish']
+  model:
+    value: efficientnet_v2_s
+  epochs:
+    values: [50, 80, 120, 180]
+  batch_size:
+    value: 32

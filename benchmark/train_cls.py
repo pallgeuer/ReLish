@@ -164,18 +164,7 @@ def load_dataset(C):
 		train_dataset = torchvision.datasets.ImageFolder(root=os.path.join(folder_path, 'train'), transform=train_tfrm)
 		valid_dataset = torchvision.datasets.ImageFolder(root=os.path.join(folder_path, 'val'), transform=valid_tfrm)
 
-	elif C.dataset in ('Imagenette', 'Imagewoof', 'ImageNet1K'):
-		if C.dataset == 'Imagenette':
-			num_classes = 10
-			folder_path = os.path.join(C.dataset_path, C.dataset, 'imagenette2-320')
-		elif C.dataset == 'Imagewoof':
-			num_classes = 10
-			folder_path = os.path.join(C.dataset_path, C.dataset, 'imagewoof2-320')
-		elif C.dataset == 'ImageNet1K':
-			num_classes = 1000
-			folder_path = os.path.join(C.dataset_path, C.dataset, 'ILSVRC2012')
-		else:
-			raise AssertionError
+	elif C.dataset in ('Imagenette', 'Imagewoof', 'Food101', 'ImageNet1K'):
 		in_shape = (3, 224, 224)
 		train_tfrm = transforms.Compose([
 			transforms.RandomResizedCrop(size=224),
@@ -190,8 +179,25 @@ def load_dataset(C):
 			transforms.ToTensor(),
 			tfrm_normalize_rgb,
 		])
-		train_dataset = torchvision.datasets.ImageFolder(root=os.path.join(folder_path, 'train'), transform=train_tfrm)
-		valid_dataset = torchvision.datasets.ImageFolder(root=os.path.join(folder_path, 'val'), transform=valid_tfrm)
+		if C.dataset == 'Food101':
+			num_classes = 101
+			folder_path = os.path.join(C.dataset_path, C.dataset, 'food-101')
+			train_dataset = torchvision.datasets.Food101(root=folder_path, split='train', transform=train_tfrm)
+			valid_dataset = torchvision.datasets.Food101(root=folder_path, split='test', transform=valid_tfrm)
+		else:
+			if C.dataset == 'Imagenette':
+				num_classes = 10
+				folder_path = os.path.join(C.dataset_path, C.dataset, 'imagenette2-320')
+			elif C.dataset == 'Imagewoof':
+				num_classes = 10
+				folder_path = os.path.join(C.dataset_path, C.dataset, 'imagewoof2-320')
+			elif C.dataset == 'ImageNet1K':
+				num_classes = 1000
+				folder_path = os.path.join(C.dataset_path, C.dataset, 'ILSVRC2012')
+			else:
+				raise AssertionError
+			train_dataset = torchvision.datasets.ImageFolder(root=os.path.join(folder_path, 'train'), transform=train_tfrm)
+			valid_dataset = torchvision.datasets.ImageFolder(root=os.path.join(folder_path, 'val'), transform=valid_tfrm)
 
 	else:
 		raise ValueError(f"Invalid dataset specification: {C.dataset}")

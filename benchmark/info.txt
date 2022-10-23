@@ -50,6 +50,13 @@ Classification Datasets
 	- 10 classes
 	- {DATASET_PATH}/Imagewoof/imagewoof2-320/{train,val}/n*/*
 
+- Food-101:
+	- 75,750 training samples
+	- 25,250 validation samples
+	- Longer side <=512 RGB images => 224x224 RGB images
+	- 101 classes
+	- {DATASET_PATH}/Food101/food-101/{images, meta}/*
+
 - ImageNet1K:
 	- 1,281,167 training samples
 	- 50,000 validation samples
