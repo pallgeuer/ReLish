@@ -181,7 +181,7 @@ def load_dataset(C):
 		])
 		if C.dataset == 'Food101':
 			num_classes = 101
-			folder_path = os.path.join(C.dataset_path, C.dataset, 'food-101')
+			folder_path = os.path.join(C.dataset_path, C.dataset)
 			train_dataset = torchvision.datasets.Food101(root=folder_path, split='train', transform=train_tfrm)
 			valid_dataset = torchvision.datasets.Food101(root=folder_path, split='test', transform=valid_tfrm)
 		else:
