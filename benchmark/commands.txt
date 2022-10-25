@@ -61,6 +61,7 @@ CLASSIFICATION DATASETS
 -----------------------
 
 - Configuration:
+	ENV=relish
 	DATASETS=~/Datasets  # <-- Customise this if necessary!
 	MNIST_ROOT="$DATASETS"/MNIST
 	FASHION_MNIST_ROOT="$DATASETS"/FashionMNIST
@@ -70,6 +71,7 @@ CLASSIFICATION DATASETS
 	IMAGEWOOF_ROOT="$DATASETS"/Imagewoof
 	FOOD_ROOT="$DATASETS"/Food101
 	IMAGENET1K_ROOT="$DATASETS"/ImageNet1K
+	INATURALIST_ROOT="$DATASETS"/iNaturalist
 
 - MNIST:
 	mkdir "$MNIST_ROOT"
@@ -127,6 +129,10 @@ CLASSIFICATION DATASETS
 	mkdir "$IMAGENET1K_ROOT/ILSVRC2012/train" && tar -xf "$IMAGENET1K_ROOT"/ILSVRC2012/ILSVRC2012_img_train.tar -C "$IMAGENET1K_ROOT/ILSVRC2012/train" && rm "$IMAGENET1K_ROOT"/ILSVRC2012/ILSVRC2012_img_train.tar
 	for class_tar in "$IMAGENET1K_ROOT/ILSVRC2012/train"/*.tar; do class_dir="${class_tar%.tar}"; mkdir "$class_dir" && tar -xf "$class_tar" -C "$class_dir" && rm "$class_tar"; done
 	find "$IMAGENET1K_ROOT/ILSVRC2012/train" -name "*.JPEG" | wc -l  # Should be 1281167
+
+- iNaturalist:
+	conda activate $ENV
+	python -c "import torchvision.datasets"$'\n'"[torchvision.datasets.INaturalist('$INATURALIST_ROOT', version, download=True) for version in ('2021_train', '2021_train_mini', '2021_valid')]"
 
 TRAIN CLASSIFICATION MODEL
 --------------------------
