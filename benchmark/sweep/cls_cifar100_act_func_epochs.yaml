@@ -13,7 +13,7 @@ parameters:
   dataset:
     value: CIFAR100
   amp:
-    value: true
+    value: false
   act_func:
     values: ['relu', 'silu', 'mish']
   model:

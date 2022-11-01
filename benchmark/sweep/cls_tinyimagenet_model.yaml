@@ -13,7 +13,7 @@ parameters:
   dataset:
     value: TinyImageNet
   amp:
-    value: true
+    value: false
   act_func:
     value: original
   model:
