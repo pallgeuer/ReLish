@@ -361,8 +361,8 @@ act_func_extra_map = {
 	'leakyrelu': ('leakyrelu-0.01', 'leakyrelu-0.05', 'leakyrelu-0.25'),
 	'eswish': ('eswish-1.25', 'eswish-1.5', 'eswish-1.75'),
 	'pswish': ('pswish-pf', 'pswish-fp', 'pswish-pp'),
-	'relishg1': ('relishg1-0.55-0.91-1.5',),
-	'relishg2': ('relishg2-0.55-0.91-1.5',),
+	'relishg1': ('relishg1-0.1872-0.5458-1.75', 'relishg1-0.1872-0.5458-1.5', 'relishg1-0.4169-0.955-1.25', 'relishg1-0.3631-0.4786-1'),
+	'relishg2': ('relishg2-0.4467-0.955-1.75', 'relishg2-0.01-0.263-1.5', 'relishg2-0.01-0.3631-1.25', 'relishg2-0.01-0.263-1'),
 	'relishp1': ('relishp1-ppf', 'relishp1-ffp', 'relishp1-ppp'),
 	'relishp2': ('relishp2-ppf', 'relishp2-ffp', 'relishp2-ppp'),
 }
