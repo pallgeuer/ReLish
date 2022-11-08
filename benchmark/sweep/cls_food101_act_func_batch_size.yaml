@@ -17,8 +17,12 @@ parameters:
   act_func:
     values: ['relu', 'silu', 'mish']
   model:
-    value: efficientnet_v2_s
+    value: swin_t
   epochs:
     value: 120
+  warmup_epochs:
+    value: 20
   batch_size:
     values: [16, 32, 64, 128]
+  optimizer:
+    value: adamw
