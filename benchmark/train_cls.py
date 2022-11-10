@@ -45,6 +45,7 @@ def main():
 	parser.add_argument('--epochs', type=int, default=80, metavar='NUM', help='Number of epochs to train (default: %(default)s)')
 	parser.add_argument('--warmup_epochs', type=int, default=0, metavar='NUM', help='Number of linear learning rate warmup epochs (default: %(default)s)')
 	parser.add_argument('--batch_size', type=int, default=64, metavar='SIZE', help='Training batch size (default: %(default)s)')
+	parser.add_argument('--max_batch_size', type=int, default=0, metavar='SIZE', help='Maximum batch size to pass into the model at once (0 = No limit)')
 	parser.add_argument('--device', type=str, default='cuda', metavar='DEVICE', help='PyTorch device to run on (default: %(default)s)')
 	parser.add_argument('--no_cudnn_bench', action='store_true', help='Disable cuDNN benchmark mode to save memory over speed')
 	parser.add_argument('--amp', action='store_true', help='Enable automatic mixed precision training')
@@ -84,7 +85,7 @@ def main():
 		util.print_wandb_config(C)
 		torch.backends.cudnn.benchmark = not C.no_cudnn_bench
 
-		train_loader, valid_loader, num_classes, in_shape = load_dataset(C)
+		train_loader, valid_loader, num_classes, in_shape, num_batch_accum = load_dataset(C)
 		model = load_model(C, num_classes, in_shape, details=args.model_details)
 		output_layer, criterion = load_criterion(C)
 		optimizer = load_optimizer(C, model.parameters())
@@ -93,7 +94,7 @@ def main():
 		if args.dry:
 			print("Dry run => Would have trained model...")
 		else:
-			train_model(C, train_loader, valid_loader, model, output_layer, criterion, optimizer, scheduler)
+			train_model(C, train_loader, valid_loader, model, output_layer, criterion, optimizer, scheduler, num_batch_accum)
 
 	print()
 
@@ -202,12 +203,24 @@ def load_dataset(C):
 	else:
 		raise ValueError(f"Invalid dataset specification: {C.dataset}")
 
-	dataset_workers = min(C.dataset_workers, C.batch_size)
-	pin_memory = torch.device(C.device).type == 'cuda'
-	train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=C.batch_size, num_workers=dataset_workers, shuffle=True, pin_memory=pin_memory)
-	valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=C.batch_size, num_workers=dataset_workers, shuffle=False, pin_memory=pin_memory)
+	if C.batch_size > C.max_batch_size > 0:
+		for num_batch_accum in range(math.ceil(C.batch_size / C.max_batch_size), C.batch_size // 2 + 1):
+			if C.batch_size % num_batch_accum == 0:
+				model_batch_size = C.batch_size // num_batch_accum
+				break
+		else:
+			model_batch_size = 1
+			num_batch_accum = C.batch_size
+	else:
+		model_batch_size = C.batch_size
+		num_batch_accum = 1
 
-	return train_loader, valid_loader, num_classes, in_shape
+	dataset_workers = min(C.dataset_workers, model_batch_size)
+	pin_memory = torch.device(C.device).type == 'cuda'
+	train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=model_batch_size, num_workers=dataset_workers, shuffle=True, pin_memory=pin_memory, drop_last=False)
+	valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=model_batch_size, num_workers=dataset_workers, shuffle=False, pin_memory=pin_memory, drop_last=False)
+
+	return train_loader, valid_loader, num_classes, in_shape, num_batch_accum
 
 # Load the model
 def load_model(C, num_classes, in_shape, details=False):
@@ -377,7 +390,7 @@ def load_scheduler(C, optimizer):
 		raise ValueError(f"Invalid learning rate scheduler specification: {C.scheduler}")
 
 # Train the model
-def train_model(C, train_loader, valid_loader, model, output_layer, criterion, optimizer, scheduler):
+def train_model(C, train_loader, valid_loader, model, output_layer, criterion, optimizer, scheduler, num_batch_accum):
 
 	valid_topk_max = [0] * 5
 	device = torch.device(C.device)
@@ -393,6 +406,7 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 	wandb.log(dict(
 		hostname=os.uname().nodename,
 		gpu=re.sub(r'(nvidia|geforce) ', '', torch.cuda.get_device_name(device) if device.type == 'cuda' else str(device), flags=re.IGNORECASE),
+		num_batch_accum=num_batch_accum,
 		epoch=0,
 		params=sum(p.numel() for p in model.parameters()),
 		params_grad=sum(p.numel() for p in model.parameters() if p.requires_grad),
@@ -409,25 +423,33 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 
 		model.train()
 
+		num_train_steps = 0
 		num_train_batches = len(train_loader)
 		num_train_samples = 0
+		num_train_accum_full = num_batch_accum * ((num_train_batches - 1) // num_batch_accum)
+		num_train_accum_samples_last = len(train_loader.dataset) - num_train_accum_full * train_loader.batch_size
 		train_loss = 0
 		train_topk = [0] * 5
 		init_detail_stamp = last_detail_stamp = timeit.default_timer()
 
-		for batch_num, (data, target_cpu) in enumerate(train_loader):
+		optimizer.zero_grad(set_to_none=True)
+		for batch_num, (data, target_cpu) in enumerate(train_loader, 1):
 
 			num_in_batch = data.shape[0]
 			data = data.to(device, non_blocking=True)
 			target = target_cpu.to(device, non_blocking=True)
 
-			optimizer.zero_grad(set_to_none=True)
 			with torch.autocast(device_type=device.type, enabled=amp_enabled):
 				output = model(data)
 				mean_batch_loss = criterion(output if output_layer is None else output_layer(output), target)
-			scaler.scale(mean_batch_loss).backward()
-			scaler.step(optimizer)
-			scaler.update()
+				mean_accum_batch_loss = mean_batch_loss / num_batch_accum if batch_num <= num_train_accum_full else mean_batch_loss * (num_in_batch / num_train_accum_samples_last)
+			scaler.scale(mean_accum_batch_loss).backward()
+
+			if batch_num % num_batch_accum == 0 or batch_num == num_train_batches:
+				scaler.step(optimizer)
+				scaler.update()
+				optimizer.zero_grad(set_to_none=True)
+				num_train_steps += 1
 
 			num_train_samples += num_in_batch
 			output_cpu = output.detach().to(device=cpu_device, dtype=float)
@@ -440,7 +462,7 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 			detail_stamp = timeit.default_timer()
 			if detail_stamp - last_detail_stamp >= 2.0:
 				last_detail_stamp = detail_stamp
-				print(f"\x1b[2K\r --> [{util.format_duration(detail_stamp - init_detail_stamp)}] Trained {(batch_num + 1) / num_train_batches:.1%}: Mean loss {train_loss / num_train_samples:#.4g}, Top-k ({', '.join(f'{topk / num_train_samples:.2%}' for topk in reversed(train_topk))})", end='')
+				print(f"\x1b[2K\r --> [{util.format_duration(detail_stamp - init_detail_stamp)}] Trained {batch_num / num_train_batches:.1%}: Mean loss {train_loss / num_train_samples:#.4g}, Top-k ({', '.join(f'{topk / num_train_samples:.2%}' for topk in reversed(train_topk))})", end='')
 
 		train_loss /= num_train_samples
 		if train_loss < min_train_loss or math.isnan(train_loss):
@@ -452,7 +474,7 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 		for k in range(5):
 			log[f'train_top{k + 1}'] = train_topk[k]
 
-		print(f"\x1b[2K\rTrained {num_train_samples} samples in {num_train_batches} batches in time {util.format_duration(detail_stamp - init_detail_stamp)}")
+		print(f"\x1b[2K\rTrained {num_train_samples} samples in {num_train_steps} steps and {num_train_batches} batches in time {util.format_duration(detail_stamp - init_detail_stamp)}")
 		print(f"Training results: Mean loss {train_loss:#.4g}, Top-k ({', '.join(f'{topk:.2%}' for topk in reversed(train_topk))})")
 
 		model.eval()
