@@ -308,7 +308,7 @@ def load_model(C, num_classes, in_shape, details=False):
 		elif is_swin:
 			downscale = parse_model_variant(default=32)
 			models.replace_conv2d(model.features[0], '0', dict(in_channels=in_channels, stride=(stride := (1, 1) if downscale < 16 else (2, 2) if downscale < 32 else (4, 4)), kernel_size=stride))
-			def adjust_patch_merging(cond, index):
+			def adjust_patch_merging(cond, index):  # noqa
 				if cond:
 					norm, linear = model.features[index].norm, model.features[index].reduction
 					setattr(model.features, str(index), nn.Sequential(
