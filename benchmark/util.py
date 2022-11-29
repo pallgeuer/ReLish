@@ -57,4 +57,30 @@ def parse_value(string, default, error):
 		return type(default)(string)
 	except ValueError:
 		raise ValueError(f"{error}: {string}")
+
+# Event worm
+class EventWorm:
+
+	def __init__(self, event_count):
+		self.event_count = max(event_count, 1)
+		self.count = 0
+		self.event = False
+
+	def reset(self):
+		self.count = 0
+		self.event = False
+
+	def update(self, state: bool):
+		if state:
+			self.count += 1
+			if self.is_event():
+				self.event = True
+		elif self.count > 0:
+			self.count -= 1
+
+	def is_event(self):
+		return self.count >= self.event_count
+
+	def had_event(self):
+		return self.event
 # EOF

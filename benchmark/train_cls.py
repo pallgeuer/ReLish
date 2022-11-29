@@ -50,6 +50,8 @@ def main():
 	parser.add_argument('--no_cudnn_bench', action='store_true', help='Disable cuDNN benchmark mode to save memory over speed')
 	parser.add_argument('--amp', action='store_true', help='Enable automatic mixed precision training')
 	parser.add_argument('--aaa', type=int, default=1, metavar='NUM', help='Dummy variable that allows sweeps to do multiple passes of grid searches')
+	parser.add_argument('--max_nan_batches', type=int, default=3000, metavar='NUM', help='Abort training if this many batches have a NaN output (as judged by a worm)')
+	parser.add_argument('--max_nan_epochs', type=int, default=4, metavar='NUM', help='Abort training if this many epochs have a NaN training or validation loss (as judged by a worm)')
 	parser.add_argument('--dry', action='store_true', help='Show what would be done but do not actually run the training')
 	parser.add_argument('--no_wandb', dest='use_wandb', action='store_false', help='Do not use wandb')
 	parser.add_argument('--model_details', action='store_true', help='Whether to show model details')
@@ -400,6 +402,8 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 	warmup_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1 / (C.warmup_epochs + 1), end_factor=1, total_iters=C.warmup_epochs) if C.warmup_epochs >= 1 else None
 
 	output_nans = 0
+	batch_nan_worm = util.EventWorm(event_count=C.max_nan_batches)
+	epoch_nan_worm = util.EventWorm(event_count=C.max_nan_epochs)
 	min_train_loss = math.inf
 	min_valid_loss = math.inf
 
@@ -453,7 +457,9 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 
 			num_train_samples += num_in_batch
 			output_cpu = output.detach().to(device=cpu_device, dtype=float)
-			output_nans += torch.count_nonzero(output_cpu.isnan()).item()
+			batch_output_nans = torch.count_nonzero(output_cpu.isnan()).item()
+			batch_nan_worm.update(batch_output_nans > 0)
+			output_nans += batch_output_nans
 			batch_topk_sum = calc_topk_sum(output_cpu, target_cpu, topn=5)
 			for k in range(5):
 				train_topk[k] += batch_topk_sum[k]
@@ -498,7 +504,9 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 
 				num_valid_samples += num_in_batch
 				output_cpu = output.detach().to(device=cpu_device, dtype=float)
-				output_nans += torch.count_nonzero(output_cpu.isnan()).item()
+				batch_output_nans = torch.count_nonzero(output_cpu.isnan()).item()
+				batch_nan_worm.update(batch_output_nans > 0)
+				output_nans += batch_output_nans
 				batch_topk_sum = calc_topk_sum(output_cpu, target_cpu, topn=5)
 				for k in range(5):
 					valid_topk[k] += batch_topk_sum[k]
@@ -536,6 +544,11 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 
 		log.update(output_nans=output_nans)
 		wandb.log(log)
+
+		epoch_nan_worm.update(math.isnan(train_loss) or math.isnan(valid_loss))
+		if epoch_nan_worm.had_event() or batch_nan_worm.had_event():
+			print(f"Aborting training run due to excessive NaNs ({epoch_nan_worm.count} worm epochs, {batch_nan_worm.count} worm batches)")
+			break
 
 # Calculate summed topk accuracies for a batch
 def calc_topk_sum(output, target, topn=5):
