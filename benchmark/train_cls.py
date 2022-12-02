@@ -6,6 +6,7 @@ import os
 import re
 import sys
 import math
+import time
 import timeit
 import argparse
 import functools
@@ -83,6 +84,19 @@ def main():
 		if args.use_wandb:
 			print()
 
+		pause_dir = wandb.run.dir or '/tmp'
+		pause_files = []
+		for _ in range(3):
+			if len(pause_dir) < 4:
+				break
+			pause_files.append(os.path.join(pause_dir, 'PAUSE'))
+			pause_dir = os.path.dirname(pause_dir)
+		if pause_files:
+			print("Monitoring for pause files:")
+			for pause_file in pause_files:
+				print(f"  {pause_file}")
+			print()
+
 		C = wandb.config
 		util.print_wandb_config(C)
 		torch.backends.cudnn.benchmark = not C.no_cudnn_bench
@@ -96,7 +110,7 @@ def main():
 		if args.dry:
 			print("Dry run => Would have trained model...")
 		else:
-			train_model(C, train_loader, valid_loader, model, output_layer, criterion, optimizer, scheduler, num_batch_accum)
+			train_model(C, train_loader, valid_loader, model, output_layer, criterion, optimizer, scheduler, num_batch_accum, pause_files)
 
 	print()
 
@@ -392,7 +406,7 @@ def load_scheduler(C, optimizer):
 		raise ValueError(f"Invalid learning rate scheduler specification: {C.scheduler}")
 
 # Train the model
-def train_model(C, train_loader, valid_loader, model, output_layer, criterion, optimizer, scheduler, num_batch_accum):
+def train_model(C, train_loader, valid_loader, model, output_layer, criterion, optimizer, scheduler, num_batch_accum, pause_files):
 
 	valid_topk_max = [0] * 5
 	device = torch.device(C.device)
@@ -544,6 +558,15 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 
 		log.update(output_nans=output_nans)
 		wandb.log(log)
+
+		paused = False
+		while any(os.path.exists(pause_file) for pause_file in pause_files):
+			if not paused:
+				print(f"{'*' * 35}  PAUSED  {'*' * 35}")
+				paused = True
+			time.sleep(3)
+		if paused:
+			print(f"{'*' * 34}  UNPAUSED  {'*' * 34}")
 
 		epoch_nan_worm.update(math.isnan(train_loss) or math.isnan(valid_loss))
 		if epoch_nan_worm.had_event() or batch_nan_worm.had_event():
