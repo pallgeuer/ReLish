@@ -95,6 +95,7 @@ def main():
 			print("Monitoring for pause files:")
 			for pause_file in pause_files:
 				print(f"  {pause_file}")
+			wait_if_paused(pause_files)
 			print()
 
 		C = wandb.config
@@ -434,6 +435,8 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 	init_epoch_stamp = epoch_stamp = timeit.default_timer()
 	for epoch in range(1, C.epochs + 1):
 
+		wait_if_paused(pause_files)
+
 		print('-' * 80)
 		lr = optimizer.param_groups[0]['lr']
 		print(f"Epoch {epoch}/{C.epochs}, LR {lr:.3g}")
@@ -559,15 +562,6 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 		log.update(output_nans=output_nans)
 		wandb.log(log)
 
-		paused = False
-		while any(os.path.exists(pause_file) for pause_file in pause_files):
-			if not paused:
-				print(f"{'*' * 35}  PAUSED  {'*' * 35}")
-				paused = True
-			time.sleep(3)
-		if paused:
-			print(f"{'*' * 34}  UNPAUSED  {'*' * 34}")
-
 		epoch_nan_worm.update(math.isnan(train_loss) or math.isnan(valid_loss))
 		if epoch_nan_worm.had_event() or batch_nan_worm.had_event():
 			print(f"Aborting training run due to excessive NaNs ({epoch_nan_worm.count} worm epochs, {batch_nan_worm.count} worm batches)")
@@ -582,6 +576,17 @@ def calc_topk_sum(output, target, topn=5):
 	topk_tensor = torch.unsqueeze(target, dim=1).eq(top_indices).cumsum(dim=1).sum(dim=0, dtype=float)
 	topk_tuple = tuple(topk.item() for topk in topk_tensor)
 	return topk_tuple if num_classes >= topn else topk_tuple + (topk_tuple[-1] * (topn - num_classes))
+
+# Wait around if paused
+def wait_if_paused(pause_files):
+	paused = False
+	while any(os.path.exists(pause_file) for pause_file in pause_files):
+		if not paused:
+			print(f"{'*' * 35}  PAUSED  {'*' * 35}")
+			paused = True
+		time.sleep(3)
+	if paused:
+		print(f"{'*' * 34}  UNPAUSED  {'*' * 34}")
 
 # Run main function
 if __name__ == "__main__":
