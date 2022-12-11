@@ -1,0 +1,24 @@
+program: train_cls.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - ${args_no_boolean_flags}
+project: cls_inaturalist
+method: grid
+metric:
+  goal: maximize
+  name: valid_top1_max
+parameters:
+  dataset:
+    value: iNaturalist
+  amp:
+    value: false
+  act_func:
+    value: original
+  model:
+    values: efficientnet_v2_s
+  epochs:
+    value: 80
+  batch_size:
+    value: 32

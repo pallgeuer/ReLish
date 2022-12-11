@@ -11,6 +11,7 @@ import timeit
 import argparse
 import functools
 import contextlib
+import collections
 import torch
 import torch.nn as nn
 import torch.utils.data
@@ -35,6 +36,7 @@ def main():
 	parser.add_argument('--dataset', type=str, default='CIFAR10', metavar='NAME', help='Classification dataset to train on (default: %(default)s)')
 	parser.add_argument('--dataset_path', type=str, default=None, metavar='PATH', help='Classification dataset root path (default: ENV{DATASET_PATH} or ~/Datasets)')
 	parser.add_argument('--dataset_workers', type=int, default=4, metavar='NUM', help='Number of worker processes to use for dataset loading (default: %(default)d)')
+	parser.add_argument('--dataset_details', action='store_true', help='Whether to calculate and show dataset details')
 	parser.add_argument('--no_auto_augment', action='store_true', help='Disable the AutoAugment input data transform (where present)')
 	parser.add_argument('--model', type=str, default='resnet18', metavar='MODEL', help='Classification model (default: %(default)s)')
 	parser.add_argument('--act_func', type=str, default='original', metavar='NAME', help='Activation function (default: %(default)s)')
@@ -76,7 +78,7 @@ def main():
 			group=args.wandb_group,
 			job_type=args.wandb_job_type,
 			name=args.wandb_name,
-			config={key: value for key, value in vars(args).items() if not key.startswith('wandb_') and key not in ('dry', 'use_wandb', 'model_details')},
+			config={key: value for key, value in vars(args).items() if not key.startswith('wandb_') and key not in ('dry', 'use_wandb', 'model_details', 'dataset_details')},
 			dir=log_dir,
 			mode='online' if args.use_wandb else 'disabled',
 		))
@@ -102,7 +104,7 @@ def main():
 		util.print_wandb_config(C)
 		torch.backends.cudnn.benchmark = not C.no_cudnn_bench
 
-		train_loader, valid_loader, num_classes, in_shape, num_batch_accum = load_dataset(C)
+		train_loader, valid_loader, num_classes, in_shape, num_batch_accum = load_dataset(C, details=args.dataset_details)
 		model = load_model(C, num_classes, in_shape, details=args.model_details)
 		output_layer, criterion = load_criterion(C)
 		optimizer = load_optimizer(C, model.parameters())
@@ -116,10 +118,11 @@ def main():
 	print()
 
 # Load the dataset
-def load_dataset(C):
+def load_dataset(C, details=False):
 
 	tfrm_normalize_rgb = transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
 
+	is_inaturalist = C.dataset.startswith('iNaturalist')
 	if C.dataset in ('MNIST', 'FashionMNIST'):
 		num_classes = 10
 		in_shape = (1, 28, 28)
@@ -182,7 +185,7 @@ def load_dataset(C):
 		train_dataset = torchvision.datasets.ImageFolder(root=os.path.join(folder_path, 'train'), transform=train_tfrm)
 		valid_dataset = torchvision.datasets.ImageFolder(root=os.path.join(folder_path, 'val'), transform=valid_tfrm)
 
-	elif C.dataset in ('Imagenette', 'Imagewoof', 'Food101', 'ImageNet1K'):
+	elif C.dataset in ('Imagenette', 'Imagewoof', 'Food101', 'ImageNet1K') or is_inaturalist:
 		in_shape = (3, 224, 224)
 		train_tfrm = transforms.Compose([
 			transforms.RandomResizedCrop(size=224),
@@ -202,6 +205,17 @@ def load_dataset(C):
 			folder_path = os.path.join(C.dataset_path, C.dataset)
 			train_dataset = torchvision.datasets.Food101(root=folder_path, split='train', transform=train_tfrm)
 			valid_dataset = torchvision.datasets.Food101(root=folder_path, split='test', transform=valid_tfrm)
+		elif is_inaturalist:  # Format: iNaturalist[2021][M][-{genus|6}]
+			match = re.fullmatch(r'iNaturalist(\d{4})?(M)?(-(([a-z]+)|(\d+)))?', C.dataset)
+			if not match:
+				raise ValueError(f"Failed to parse iNaturalist dataset specification: {C.dataset}")
+			version_year = match.group(1) or '2021'
+			target_types = (('kingdom', 3), ('phylum', 13), ('class', 51), ('order', 273), ('family', 1103), ('genus', 4884), ('full', 10000))
+			target_type = match.group(5) or target_types[int(levelstr) - 1 if (levelstr := match.group(6)) else -1][0]
+			num_classes = dict(target_types)[target_type]
+			folder_path = os.path.join(C.dataset_path, 'iNaturalist')
+			train_dataset = torchvision.datasets.INaturalist(root=folder_path, version=f"{version_year}_train{'_mini' if match.group(2) else ''}", target_type=target_type, transform=train_tfrm)
+			valid_dataset = torchvision.datasets.INaturalist(root=folder_path, version=f"{version_year}_valid", target_type=target_type, transform=valid_tfrm)
 		else:
 			if C.dataset == 'Imagenette':
 				num_classes = 10
@@ -237,7 +251,44 @@ def load_dataset(C):
 	train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=model_batch_size, num_workers=dataset_workers, shuffle=True, pin_memory=pin_memory, drop_last=False)
 	valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=model_batch_size, num_workers=dataset_workers, shuffle=False, pin_memory=pin_memory, drop_last=False)
 
+	if details:
+		print("Validation dataset objects:")
+		print(valid_dataset)
+		print(valid_loader)
+		print()
+		show_dataset_details(*calc_dataset_details(valid_loader), name='Validation dataset')
+		print("Training dataset objects:")
+		print(train_dataset)
+		print(train_loader)
+		print()
+		show_dataset_details(*calc_dataset_details(train_loader), name='Training dataset')
+
 	return train_loader, valid_loader, num_classes, in_shape, num_batch_accum
+
+# Calculate details of a dataset
+def calc_dataset_details(loader):
+	data_shapes = collections.Counter()
+	class_counts = collections.Counter()
+	for data, target_cpu in loader:
+		data_shapes[tuple(data.shape[1:])] += data.shape[0]
+		class_counts.update(target_cpu.tolist())
+	num_samples = len(loader.dataset)
+	if num_samples != sum(class_counts.values()):
+		raise AssertionError
+	num_classes = len(class_counts)
+	if sorted(class_counts.keys()) != list(range(num_classes)):
+		raise ValueError("Dataset class indices are not a continuous range 0 -> N-1")
+	return num_samples, len(loader), num_classes, class_counts, data_shapes
+
+# Show details of a dataset
+def show_dataset_details(num_samples, num_batches, num_classes, class_counts, data_shapes, name='Dataset'):
+	print(f"{name} details:")
+	print(f"  Num samples = {num_samples}")
+	print(f"  Num batches = {num_batches}")
+	print(f"  Num classes = {num_classes}")
+	print("  Data shapes = {0}".format(', '.join(f'{count} \u00D7 {shape}' for shape, count in data_shapes.most_common())))
+	print(f"  Class counts = {tuple(class_counts[c] for c in range(num_classes))}")
+	print()
 
 # Load the model
 def load_model(C, num_classes, in_shape, details=False):

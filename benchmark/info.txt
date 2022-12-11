@@ -55,7 +55,7 @@ Classification Datasets
 	- 25,250 validation samples
 	- Longer side <=512 RGB images => 224x224 RGB images
 	- 101 classes
-	- {DATASET_PATH}/Food101/food-101/{images, meta}/*
+	- {DATASET_PATH}/Food101/food-101/{images,meta}/*
 
 - ImageNet1K:
 	- 1,281,167 training samples
@@ -63,6 +63,13 @@ Classification Datasets
 	- RGB images => 224x224 RGB images
 	- 1000 classes
 	- {DATASET_PATH}/ImageNet1K/ILSVRC2012/{train,val}/n*/*
+
+- iNaturalist 2021:
+	- 2,686,843 training samples (mini => 500,000 training samples)
+	- 100,000 validation samples
+	- RGB images => 224x224 RGB images
+	- Classes: 3 kingdom, 13 phylum, 51 class, 273 order, 1103 family, 4884 genus, 10000 full
+	- {DATASET_PATH}/iNaturalist/2021_{train,train_mini,valid}/*/*
 
 Classification Models
 =====================
