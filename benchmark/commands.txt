@@ -133,6 +133,7 @@ CLASSIFICATION DATASETS
 - iNaturalist:
 	conda activate $ENV
 	python -c "import torchvision.datasets"$'\n'"[torchvision.datasets.INaturalist('$INATURALIST_ROOT', version, download=True) for version in ('2021_train', '2021_train_mini', '2021_valid')]"
+	rm -f "$INATURALIST_ROOT"/2021_{train,train_mini,valid}.tgz
 
 TRAIN CLASSIFICATION MODEL
 --------------------------
