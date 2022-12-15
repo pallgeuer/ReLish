@@ -62,7 +62,7 @@ Classification Datasets
 	- 50,000 validation samples
 	- RGB images => 224x224 RGB images
 	- 1000 classes
-	- {DATASET_PATH}/ImageNet1K/ILSVRC2012/{train,val}/n*/*
+	- {DATASET_PATH}/ImageNet1K/ILSVRC-CLS/{train,val}/n*/*
 
 - iNaturalist 2021:
 	- 2,686,843 training samples (mini => 500,000 training samples)

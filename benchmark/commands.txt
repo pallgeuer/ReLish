@@ -122,13 +122,13 @@ CLASSIFICATION DATASETS
 		Download 'Training images (Task 1 & 2)' -> Can alternatively just try the wget below
 		Download 'Validation images (all tasks)' -> Can alternatively just try the wget below
 	mkdir "$IMAGENET1K_ROOT"
-	wget -P "$IMAGENET1K_ROOT/ILSVRC2012" https://image-net.org/data/ILSVRC/2012/ILSVRC2012_img_val.tar https://image-net.org/data/ILSVRC/2012/ILSVRC2012_img_train.tar
-	mkdir "$IMAGENET1K_ROOT/ILSVRC2012/val" && tar -xf "$IMAGENET1K_ROOT"/ILSVRC2012/ILSVRC2012_img_val.tar -C "$IMAGENET1K_ROOT/ILSVRC2012/val" && rm "$IMAGENET1K_ROOT"/ILSVRC2012/ILSVRC2012_img_val.tar
-	(cd "$IMAGENET1K_ROOT/ILSVRC2012/val"; wget -qO- https://raw.githubusercontent.com/soumith/imagenetloader.torch/master/valprep.sh | bash; )
-	find "$IMAGENET1K_ROOT/ILSVRC2012/val" -name "*.JPEG" | wc -l  # Should be 50000
-	mkdir "$IMAGENET1K_ROOT/ILSVRC2012/train" && tar -xf "$IMAGENET1K_ROOT"/ILSVRC2012/ILSVRC2012_img_train.tar -C "$IMAGENET1K_ROOT/ILSVRC2012/train" && rm "$IMAGENET1K_ROOT"/ILSVRC2012/ILSVRC2012_img_train.tar
-	for class_tar in "$IMAGENET1K_ROOT/ILSVRC2012/train"/*.tar; do class_dir="${class_tar%.tar}"; mkdir "$class_dir" && tar -xf "$class_tar" -C "$class_dir" && rm "$class_tar"; done
-	find "$IMAGENET1K_ROOT/ILSVRC2012/train" -name "*.JPEG" | wc -l  # Should be 1281167
+	wget -P "$IMAGENET1K_ROOT/ILSVRC-CLS" https://image-net.org/data/ILSVRC/2012/ILSVRC2012_img_val.tar https://image-net.org/data/ILSVRC/2012/ILSVRC2012_img_train.tar
+	mkdir "$IMAGENET1K_ROOT/ILSVRC-CLS/val" && tar -xf "$IMAGENET1K_ROOT"/ILSVRC-CLS/ILSVRC2012_img_val.tar -C "$IMAGENET1K_ROOT/ILSVRC-CLS/val" && rm "$IMAGENET1K_ROOT"/ILSVRC-CLS/ILSVRC2012_img_val.tar
+	(cd "$IMAGENET1K_ROOT/ILSVRC-CLS/val"; wget -qO- https://raw.githubusercontent.com/soumith/imagenetloader.torch/master/valprep.sh | bash; )
+	find "$IMAGENET1K_ROOT/ILSVRC-CLS/val" -name "*.JPEG" | wc -l  # Should be 50000
+	mkdir "$IMAGENET1K_ROOT/ILSVRC-CLS/train" && tar -xf "$IMAGENET1K_ROOT"/ILSVRC-CLS/ILSVRC2012_img_train.tar -C "$IMAGENET1K_ROOT/ILSVRC-CLS/train" && rm "$IMAGENET1K_ROOT"/ILSVRC-CLS/ILSVRC2012_img_train.tar
+	for class_tar in "$IMAGENET1K_ROOT/ILSVRC-CLS/train"/*.tar; do class_dir="${class_tar%.tar}"; mkdir "$class_dir" && tar -xf "$class_tar" -C "$class_dir" && rm "$class_tar"; done
+	find "$IMAGENET1K_ROOT/ILSVRC-CLS/train" -name "*.JPEG" | wc -l  # Should be 1281167
 
 - iNaturalist:
 	conda activate $ENV

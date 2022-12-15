@@ -225,7 +225,7 @@ def load_dataset(C, details=False):
 				folder_path = os.path.join(C.dataset_path, C.dataset, 'imagewoof2-320')
 			elif C.dataset == 'ImageNet1K':
 				num_classes = 1000
-				folder_path = os.path.join(C.dataset_path, C.dataset, 'ILSVRC2012')
+				folder_path = os.path.join(C.dataset_path, C.dataset, 'ILSVRC-CLS')
 			else:
 				raise AssertionError
 			train_dataset = torchvision.datasets.ImageFolder(root=os.path.join(folder_path, 'train'), transform=train_tfrm)
