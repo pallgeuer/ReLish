@@ -1,0 +1,33 @@
+program: train_cls.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - ${args_no_boolean_flags}
+project: cls_act_func
+method: grid
+metric:
+  goal: maximize
+  name: valid_top1_max
+parameters:
+  aaa:
+    min: 1
+    max: 12
+  dataset:
+    values: ['MNIST', 'FashionMNIST']
+  act_func:
+    values: ['relu', 'silu', 'mish', 'gelu-exact']
+  model:
+    value: fcnet
+  epochs:
+    value: 50
+  warmup_epochs:
+    value: 0
+  batch_size:
+    value: 128
+  max_batch_size:
+    value: 0
+  optimizer:
+    value: adam
+  amp:
+    value: true

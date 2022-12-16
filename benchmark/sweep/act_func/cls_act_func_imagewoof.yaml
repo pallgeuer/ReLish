@@ -1,0 +1,35 @@
+program: train_cls.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - ${args_no_boolean_flags}
+project: cls_act_func
+method: grid
+metric:
+  goal: maximize
+  name: valid_top1_max
+parameters:
+  aaa:
+    min: 1
+    max: 12
+  dataset:
+    value: Imagewoof
+  act_func:
+    values: ['relu', 'silu', 'mish', 'gelu-exact']
+  model:
+    value: resnext50_32x4d
+  epochs:
+    value: 300
+  warmup_epochs:
+    value: 0
+  batch_size:
+    value: 64
+  max_batch_size:
+    value: 32
+  optimizer:
+    value: adam
+  amp:
+    value: false
+  lr_scale:
+    value: 3
