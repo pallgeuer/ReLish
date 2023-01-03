@@ -45,6 +45,7 @@ def main():
 
 	parser_summary = parser.add_argument_group('Summary metric filters')
 	add_filter = functools.partial(add_argparse_filter, ns='summary_metrics')
+	add_filter(parser_summary, 'output_nans', int)
 	add_filter(parser_summary, 'params', int)
 	add_filter(parser_summary, 'hostname', str)
 	add_filter(parser_summary, 'gpu', str)
