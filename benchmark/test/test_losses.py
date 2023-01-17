@@ -8,7 +8,6 @@ import functools
 import dataclasses
 import torch
 import torch.nn.functional as F
-import matplotlib.pyplot as plt
 
 #
 # Dataclasses
@@ -32,7 +31,8 @@ def main():
 
 	parser = argparse.ArgumentParser()
 	parser.add_argument('--device', default='cuda', help='Device to perform calculations on')
-	parser.add_argument('--eps', type=float, default=0.2, help='Value of epsilon to use')
+	parser.add_argument('--eps', type=float, default=0.20, help='Value of epsilon to use (all but NLL)')
+	parser.add_argument('--tau', type=float, default=0.35, help='Value of tau to use (SRRL)')
 	parser.add_argument('--evalx', type=float, nargs='+', help='Evaluate case where raw logits are as listed (first is true class)')
 	parser.add_argument('--evalp', type=float, nargs='+', help='Evaluate case where probabilities are as listed (first is true class, rescaled to sum to 1)')
 	parser.add_argument('--loss', default='nll', help='Which loss to consider')
@@ -47,7 +47,7 @@ def main():
 		dnll=('DNLL', functools.partial(dnll_loss, eps=args.eps, cap=False)),
 		dnllcap=('DNLLCap', functools.partial(dnll_loss, eps=args.eps, cap=True)),
 		rrl=('RRL', functools.partial(rrl_loss, eps=args.eps, cap=False)),
-		srrl=('SRRL', functools.partial(srrl_loss, eps=args.eps, cap=False)),
+		srrl=('SRRL', functools.partial(srrl_loss, eps=args.eps, tau=args.tau, cap=False)),
 	)
 
 	if args.evalp:
@@ -132,10 +132,15 @@ def rrl_loss(x, eps, cap):  # TODO: Capping?
 	return L, p
 
 # Saturated raw logit loss
-def srrl_loss(x, eps, cap):
-	pass  # TODO: IMPLEMENT
-
-#
+def srrl_loss(x, eps, tau, cap):  # TODO: Capping?
+	K = x.numel()
+	p = F.softmax(x, dim=0)
+	eta = math.log(1 - eps) - math.log(eps / (K - 1))
+	delta = ((1 - tau) / tau) * ((K-1) / K) * eta * eta
+	J = (x[0] - eta).square() + x[1:].square().sum() - torch.square(x[0] - eta + x[1:].sum()) / K
+	C = 1 / math.sqrt(tau)
+	L = C * torch.sqrt(J + delta)
+	return L, p
 
 #
 # Utilities
