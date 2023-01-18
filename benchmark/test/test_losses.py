@@ -32,7 +32,7 @@ def main():
 	parser = argparse.ArgumentParser()
 	parser.add_argument('--device', default='cuda', help='Device to perform calculations on')
 	parser.add_argument('--eps', type=float, default=0.20, help='Value of epsilon to use (all but NLL)')
-	parser.add_argument('--tau', type=float, default=0.35, help='Value of tau to use (SRRL)')
+	parser.add_argument('--tau', type=float, default=0, help='Value of tau to use (SRRL, 0 = Auto calculate)')
 	parser.add_argument('--evalx', type=float, nargs='+', help='Evaluate case where raw logits are as listed (first is true class)')
 	parser.add_argument('--evalp', type=float, nargs='+', help='Evaluate case where probabilities are as listed (first is true class, rescaled to sum to 1)')
 	parser.add_argument('--loss', default='nll', help='Which loss to consider')
@@ -136,6 +136,8 @@ def srrl_loss(x, eps, tau, cap):  # TODO: Capping?
 	K = x.numel()
 	p = F.softmax(x, dim=0)
 	eta = math.log(1 - eps) - math.log(eps / (K - 1))
+	if tau <= 0:
+		tau = (1 - 1 / (K * (1 - eps))) ** 2
 	delta = ((1 - tau) / tau) * ((K-1) / K) * eta * eta
 	J = (x[0] - eta).square() + x[1:].square().sum() - torch.square(x[0] - eta + x[1:].sum()) / K
 	C = 1 / math.sqrt(tau)
