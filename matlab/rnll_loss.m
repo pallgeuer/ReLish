@@ -62,8 +62,8 @@ function rnll_loss(pTdes, pFdes, K, fig)
 	[losses, loss_names] = define_loss(losses, loss_names, 'KLDiv', CXNLL * (en*(log(en) - log(pT)) + epp*(log(epp) - log(pF)) + sum(epp*(log(epp) - log(pK)))));  % Kullback-Leibler divergence loss: Identical to SNLL up to constant shift
 	[losses, loss_names] = define_loss(losses, loss_names, 'SNLL', -CXNLL * (en*log(pT) + epp*sum(log(pFK))));  % Label-smoothed negative log likelihood loss
 	[losses, loss_names] = define_loss(losses, loss_names, 'DNLL', -CXNLL * (en*log(pT) + ep*log(1-pT)));  % Dual negative log likelihood loss
-	[losses, loss_names] = define_loss(losses, loss_names, 'RRL', CRRL*J);  % Relative raw logit loss
-	[losses, loss_names] = define_loss(losses, loss_names, 'SRRL', CSRRL*sqrt(J + delta));  % Saturated raw logit loss
+	[losses, loss_names] = define_loss(losses, loss_names, 'RRL', CRRL * J);  % Relative raw logit loss
+	[losses, loss_names] = define_loss(losses, loss_names, 'SRRL', CSRRL * sqrt(J + delta));  % Saturated raw logit loss
 	
 	% Plot constants
 	green = [0.4660 0.6740 0.1880];

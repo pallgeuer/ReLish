@@ -75,8 +75,8 @@ loss_names = cell(0);
 [losses, loss_names] = define_loss(losses, loss_names, 'KLDiv', CXNLL * (en*(log(en) - log(pT)) + epp*(log(epp) - log(pf1)) + epp*(log(epp) - log(pf2)) + epp*(log(epp) - log(pf3))));
 [losses, loss_names] = define_loss(losses, loss_names, 'SNLL', -CXNLL * (en*log(pT) + epp*(log(pf1) + log(pf2) + log(pf3))));
 [losses, loss_names] = define_loss(losses, loss_names, 'DNLL', -CXNLL * (en*log(pT) + ep*log(1-pT)));
-[losses, loss_names] = define_loss(losses, loss_names, 'RRL', CRRL*J);
-[losses, loss_names] = define_loss(losses, loss_names, 'SRRL', CSRRL*(sqrt(J + delta) - sqrt(delta)));
+[losses, loss_names] = define_loss(losses, loss_names, 'RRL', CRRL * J);
+[losses, loss_names] = define_loss(losses, loss_names, 'SRRL', CSRRL * sqrt(J + delta));
 % TODO: MSE / Focal loss / others from wikipedia
 % TODO: Loss that calculates desired target pT based on current distribution and capped dual-logs towards it (non-constant terms in front of logs)
 
