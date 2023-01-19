@@ -200,7 +200,7 @@ loss_situation_args = {losses, lossesdT, lossesdf1, lossesdf2, lossesdf3, losses
 fig = loss_situation(fig, "All xf are equal and WLOG let their value be zero", 'x_T', @(fn) collect(simplify(subs(fn, [xf1 xf2 xf3], [0 0 0]))), loss_situation_args{:});
 fig = loss_situation(fig, "Effective 2-way classification xT vs xf1", 'x_T', @(fn) collect(simplify(limit(subs(fn, [xf1 xf2 xf3], [0 xf xf]), xf, -Inf))), loss_situation_args{:});
 fig = loss_situation(fig, "pT = 1-ep and the rest divided amongst xf1 and equal xf2/3", 'x_d = x_{f1} - x_{f2/3}', @(fn) collect(simplify(subs(fn, [xT xf1 xf2 xf3], [0 log((1/(1-ep) - 1)/(1+2*exp(-xd))) repmat(log((1/(1-ep) - 1)/(exp(xd)+2)), 1, 2)]))), loss_situation_args{:});
-fig = loss_situation(fig, "pT = 0.9-ep and the rest divided amongst xf1 and equal xf2/3", 'x_d = x_{f1} - x_{f2/3}', @(fn) collect(simplify(subs(fn, [xT xf1 xf2 xf3], [0 log((1/(0.9-ep) - 1)/(1+2*exp(-xd))) repmat(log((1/(0.9-ep) - 1)/(exp(xd)+2)), 1, 2)]))), loss_situation_args{:});
+fig = loss_situation(fig, "pT = 0.9*(1-ep) and the rest divided amongst xf1 and equal xf2/3", 'x_d = x_{f1} - x_{f2/3}', @(fn) collect(simplify(subs(fn, [xT xf1 xf2 xf3], [0 log((1/(0.9*(1-ep)) - 1)/(1+2*exp(-xd))) repmat(log((1/(0.9*(1-ep)) - 1)/(exp(xd)+2)), 1, 2)]))), loss_situation_args{:});
 fig = loss_situation(fig, "pT = 1/K and the rest divided amongst xf1 and equal xf2/3", 'x_d = x_{f1} - x_{f2/3}', @(fn) collect(simplify(subs(fn, [xT xf1 xf2 xf3], [0 log((K - 1)/(1+2*exp(-xd))) repmat(log((K - 1)/(exp(xd)+2)), 1, 2)]))), loss_situation_args{:});
 
 %

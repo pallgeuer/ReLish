@@ -89,7 +89,7 @@ def dnll_loss(x, eps, cap):
 	return L, M
 
 # Relative raw logit loss
-def rrl_loss(x, eps, cap):  # TODO: Capping? (do NOT modify input x -> make a copy if necessary)
+def rrl_loss(x, eps, cap):  # TODO: CTS capping? (do NOT modify input x -> make a copy if necessary)
 	M = loss_common(x, eps)
 	J = (x[:, 0:1] - M.eta).square() + x[:, 1:].square().sum(dim=1, keepdim=True) - torch.square(x[:, 0:1] - M.eta + x[:, 1:].sum(dim=1, keepdim=True)) / M.K
 	C = math.sqrt(M.K / (M.K-1)) / (2 * M.eta)
@@ -97,7 +97,7 @@ def rrl_loss(x, eps, cap):  # TODO: Capping? (do NOT modify input x -> make a co
 	return L, M
 
 # Saturated raw logit loss
-def srrl_loss(x, eps, tau, cap):  # TODO: Capping? (do NOT modify input x -> make a copy if necessary)
+def srrl_loss(x, eps, tau, cap):  # TODO: CTS capping? (do NOT modify input x -> make a copy if necessary)
 	M = loss_common(x, eps, tau)
 	delta = ((1 - M.tau) / M.tau) * ((M.K-1) / M.K) * M.eta * M.eta
 	J = (x[:, 0:1] - M.eta).square() + x[:, 1:].square().sum(dim=1, keepdim=True) - torch.square(x[:, 0:1] - M.eta + x[:, 1:].sum(dim=1, keepdim=True)) / M.K
@@ -116,6 +116,12 @@ LOSS_MAP = dict(
 	rrlcap=('RRLCap', lambda x, eps, tau: rrl_loss(x, eps, cap=True)),
 	srrl=('SRRL', lambda x, eps, tau: srrl_loss(x, eps, tau, cap=False)),
 	srrlcap=('SRRLCap', lambda x, eps, tau: srrl_loss(x, eps, tau, cap=True)),
+	# TODO: MSE loss
+	# TODO: Focal loss
+	# TODO: Any other classification losses you can understand from Wikipedia
+	# TODO: Manual-grads-hack loss to get perfect capped z-grads (both saturated and unsaturated)
+	# TODO: Do you need the manual hack if you consider L as function of x instead of z?)
+	# TODO: f(p)log(p)-style loss
 )
 
 #
@@ -163,7 +169,7 @@ def plot_situation(situation, args):
 	sit_name, sit_desc, sit_var, sit_gen = SITUATION_MAP[situation.lower()]
 	print(f"SITUATION:   {sit_name}")
 	print(f"Description: {sit_desc}")
-	v, x = sit_gen(args.plot_points, args.plot_classes, device=args.device)
+	v, x = sit_gen(args)
 	generate_plots(v, x, sit_var, sit_name, args)
 	print()
 
@@ -216,22 +222,41 @@ def generate_plots(v, x, sit_var, sit_name, args):
 # Situations
 #
 
-def gen_equal_false(N, K, device):
-	v = torch.linspace(-10, 10, N)
-	x = torch.zeros((N, K), device=device)
+def gen_equal_false(args):
+	v = torch.linspace(-10, 10, args.plot_points)
+	x = torch.zeros((args.plot_points, args.plot_classes), device=args.device)
 	x[:, 0] = v
 	return v, x
 
-def gen_two_way(N, K, device):
-	v = torch.linspace(-10, 10, N)
-	x = torch.full((N, K), fill_value=-30.0, device=device)
+def gen_two_way(args):
+	v = torch.linspace(-10, 10, args.plot_points)
+	x = torch.full((args.plot_points, args.plot_classes), fill_value=-30.0, device=args.device)
 	x[:, 0] = v
 	x[:, 1] = 0
 	return v, x
 
+def gen_split(args, pT):
+	v = torch.linspace(-10, 10, args.plot_points)
+	x = torch.log((1 / pT - 1) / (2 + torch.exp(v))).repeat(args.plot_classes, 1).T
+	x[:, 0] = 0
+	x[:, 1] = torch.log((1 / pT - 1) / (1 + 2 * torch.exp(-v)))
+	return v, x
+
+def gen_split_equil(args):
+	return gen_split(args, 1 - args.eps)
+
+def gen_split_high(args):
+	return gen_split(args, 0.9 * (1 - args.eps))
+
+def gen_split_low(args):
+	return gen_split(args, 1 / args.plot_classes)
+
 SITUATION_MAP = dict(
-	equal_false=('Equal False', 'All xf are zero and xT varies', 'xT', gen_equal_false),
+	equal_false=('Equal false', 'All xf are zero and xT varies', 'xT', gen_equal_false),
 	two_way=('2-way', 'xT varies for xf1 zero and all other xf significantly negative', 'xT', gen_two_way),
+	split_equil=('Equilibrium split', 'pT = 1-eps and the rest is divided amongst pF and equal pK', 'xd = xF - xK', gen_split_equil),
+	split_high=('High split', 'pT = 0.9*(1-eps) and the rest is divided amongst pF and equal pK', 'xd = xF - xK', gen_split_high),
+	split_low=('Low split', 'pT = 1/K and the rest is divided amongst pF and equal pK', 'xd = xF - xK', gen_split_low),
 )
 
 #
