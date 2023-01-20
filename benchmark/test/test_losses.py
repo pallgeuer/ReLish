@@ -57,6 +57,13 @@ def loss_common(x, eps=DEFAULT_EPS, tau=AUTO_TAU):
 	q[:, 1:] -= eps / (K - 1)
 	return LossCommon(K=K, eps=eps, tau=tau, eta=eta, x=x, z=z, p=p, q=q)
 
+# Mean-squared error loss (Brier loss)
+def mse_loss(x):
+	M = loss_common(x)
+	C = math.sqrt(M.K / (M.K - 1)) * (27 / 8)
+	L = C * (1 - M.p[:, 0:1]).square()
+	return L, M
+
 # Negative log likelihood loss
 def nll_loss(x):
 	M = loss_common(x)
@@ -107,6 +114,7 @@ def srrl_loss(x, eps, tau, cap):  # TODO: CTS capping? (do NOT modify input x ->
 
 # Loss map
 LOSS_MAP = dict(
+	mse=('MSE', lambda x, eps, tau: mse_loss(x)),
 	nll=('NLL', lambda x, eps, tau: nll_loss(x)),
 	kldiv=('KLDiv', lambda x, eps, tau: kldiv_loss(x, eps)),
 	snll=('SNLL', lambda x, eps, tau: snll_loss(x, eps)),
@@ -116,9 +124,7 @@ LOSS_MAP = dict(
 	rrlcap=('RRLCap', lambda x, eps, tau: rrl_loss(x, eps, cap=True)),
 	srrl=('SRRL', lambda x, eps, tau: srrl_loss(x, eps, tau, cap=False)),
 	srrlcap=('SRRLCap', lambda x, eps, tau: srrl_loss(x, eps, tau, cap=True)),
-	# TODO: MSE loss
 	# TODO: Focal loss
-	# TODO: Any other classification losses you can understand from Wikipedia
 	# TODO: Manual-grads-hack loss to get perfect capped z-grads (both saturated and unsaturated)
 	# TODO: Do you need the manual hack if you consider L as function of x instead of z?)
 	# TODO: f(p)log(p)-style loss
@@ -273,7 +279,7 @@ def main():
 	parser.add_argument('--evalx', type=float, nargs='+', help='Evaluate case where raw logits are as listed (first is true class)')
 	parser.add_argument('--evalp', type=float, nargs='+', help='Evaluate case where probabilities are as listed (first is true class, rescaled to sum to 1)')
 	parser.add_argument('--plot', type=str, nargs='+', help='Situation(s) to provide plots for')
-	parser.add_argument('--plot_points', type=int, default=201, help='Number of points to use for plotting')
+	parser.add_argument('--plot_points', type=int, default=401, help='Number of points to use for plotting')
 	parser.add_argument('--plot_classes', type=int, default=10, help='Number of classes to use for plotting')
 
 	args = parser.parse_args()

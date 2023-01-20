@@ -48,16 +48,18 @@ function rnll_loss(pTdes, pFdes, K, fig)
 	pFK = [pF pK];
 
 	% Loss terms (C constants scale each loss so that the gradient norm/square-norm is 1 when all X are equal)
-	CNLL = sqrt(K/(K-1));
-	CXNLL = sqrt((K-1)/K) / (1 - ep - 1/K);
-	CRRL = sqrt(K/(K-1)) / (2*eta);
-	CSRRL = 1 / sqrt(tau);
+	CMSE = (27 / 8) * sqrt(K/(K-1));  % --> 27/8 (this matches absolute maximum dLdT to NLL as having dLdt = 1)
+	CNLL = sqrt(K/(K-1));  % --> 1
+	CXNLL = sqrt((K-1)/K) / (1 - ep - 1/K);  % --> 1/(1-ep)
+	CRRL = sqrt(K/(K-1)) / (2*eta);  % --> 0
+	CSRRL = 1 / sqrt(tau);  % --> 1
 	J = (xT-eta).^2 + sum(xFK.^2) - (xT-eta + sum(xFK)).^2 / K;
-	delta = (1-tau)/tau * (K-1)/K * eta^2;
+	delta = (1-tau)/tau * (K-1)/K * eta^2;  % --> 0
 	
 	% Define losses
 	losses = cell(0);
 	loss_names = cell(0);
+	[losses, loss_names] = define_loss(losses, loss_names, 'MSE', CMSE * (1 - pT)^2);
 	[losses, loss_names] = define_loss(losses, loss_names, 'NLL', -CNLL * log(pT));  % Negative log likelihood loss
 	[losses, loss_names] = define_loss(losses, loss_names, 'KLDiv', CXNLL * (en*(log(en) - log(pT)) + epp*(log(epp) - log(pF)) + sum(epp*(log(epp) - log(pK)))));  % Kullback-Leibler divergence loss: Identical to SNLL up to constant shift
 	[losses, loss_names] = define_loss(losses, loss_names, 'SNLL', -CXNLL * (en*log(pT) + epp*sum(log(pFK))));  % Label-smoothed negative log likelihood loss

@@ -61,6 +61,7 @@ pf3 = exp(xf3) / (exp(xT) + exp(xf1) + exp(xf2) + exp(xf3));
 assert(isequal(simplify(pT + pf1 + pf2 + pf3), sym(1)));
 
 % Loss terms (C constants scale each loss so that the gradient norm/square-norm is 1 when all X are equal)
+CMSE = (27 / 8) * sqrt(K/(K-1));
 CNLL = sqrt(K/(K-1));
 CXNLL = sqrt((K-1)/K) / (1 - ep - 1/K);
 CRRL = sqrt(K/(K-1)) / (2*eta);
@@ -71,13 +72,14 @@ delta = (1-tau)/tau * (K-1)/K * eta^2;
 % Define losses
 losses = cell(0);
 loss_names = cell(0);
+[losses, loss_names] = define_loss(losses, loss_names, 'MSE', CMSE * (1 - pT)^2);
 [losses, loss_names] = define_loss(losses, loss_names, 'NLL', -CNLL * log(pT));
 [losses, loss_names] = define_loss(losses, loss_names, 'KLDiv', CXNLL * (en*(log(en) - log(pT)) + epp*(log(epp) - log(pf1)) + epp*(log(epp) - log(pf2)) + epp*(log(epp) - log(pf3))));
 [losses, loss_names] = define_loss(losses, loss_names, 'SNLL', -CXNLL * (en*log(pT) + epp*(log(pf1) + log(pf2) + log(pf3))));
 [losses, loss_names] = define_loss(losses, loss_names, 'DNLL', -CXNLL * (en*log(pT) + ep*log(1-pT)));
 [losses, loss_names] = define_loss(losses, loss_names, 'RRL', CRRL * J);
 [losses, loss_names] = define_loss(losses, loss_names, 'SRRL', CSRRL * sqrt(J + delta));
-% TODO: MSE / Focal loss / others from wikipedia
+% TODO: Focal loss
 % TODO: Loss that calculates desired target pT based on current distribution and capped dual-logs towards it (non-constant terms in front of logs)
 
 % Plot variables
