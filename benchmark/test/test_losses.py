@@ -71,6 +71,13 @@ def nll_loss(x):
 	L = -C * torch.log(M.p[:, 0:1])
 	return L, M
 
+# Focal loss
+def focal_loss(x):
+	M = loss_common(x)
+	C = math.sqrt(M.K / (M.K - 1)) * (M.K ** 2) / ((M.K - 1) * (M.K - 1 + 2 * math.log(M.K)))
+	L = -C * (1 - M.p[:, 0:1]).square() * torch.log(M.p[:, 0:1])  # Note: gamma = 2
+	return L, M
+
 # Kullback-Leibler divergence loss
 def kldiv_loss(x, eps):
 	M = loss_common(x, eps)
@@ -79,7 +86,7 @@ def kldiv_loss(x, eps):
 	return L, M
 
 # Label-smoothed negative log likelihood loss
-def snll_loss(x, eps):
+def snll_loss(x, eps):  # TODO: Is it possible to cap SNLL?
 	M = loss_common(x, eps)
 	C = math.sqrt((M.K - 1) / M.K) / (1 - eps - 1 / M.K)
 	L = -C * ((1 - eps) * torch.log(M.p[:, 0:1]) + (eps / (M.K - 1)) * torch.sum(torch.log(M.p[:, 1:]), dim=1, keepdim=True))
@@ -116,6 +123,7 @@ def srrl_loss(x, eps, tau, cap):  # TODO: CTS capping? (do NOT modify input x ->
 LOSS_MAP = dict(
 	mse=('MSE', lambda x, eps, tau: mse_loss(x)),
 	nll=('NLL', lambda x, eps, tau: nll_loss(x)),
+	focal=('Focal', lambda x, eps, tau: focal_loss(x)),
 	kldiv=('KLDiv', lambda x, eps, tau: kldiv_loss(x, eps)),
 	snll=('SNLL', lambda x, eps, tau: snll_loss(x, eps)),
 	dnll=('DNLL', lambda x, eps, tau: dnll_loss(x, eps, cap=False)),
