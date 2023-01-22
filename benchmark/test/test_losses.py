@@ -25,6 +25,7 @@ class LossCommon:
 	K: int
 	eps: float
 	tau: float
+	mu: float
 	eta: float
 	x: torch.Tensor
 	z: torch.Tensor
@@ -49,13 +50,14 @@ def loss_common(x, eps=DEFAULT_EPS, tau=AUTO_TAU):
 	K = x.shape[1]
 	if tau == AUTO_TAU:
 		tau = (1 - 1 / (K * (1 - eps))) ** 2
+	mu = 1 - eps - eps / (K - 1)
 	eta = math.log(1 - eps) - math.log(eps / (K - 1))
 	z = x[:, 1:] - x[:, 0:1] + eta
 	p = F.softmax(x, dim=1)
 	q = p.clone()
 	q[:, 0:1] -= 1 - eps
 	q[:, 1:] -= eps / (K - 1)
-	return LossCommon(K=K, eps=eps, tau=tau, eta=eta, x=x, z=z, p=p, q=q)
+	return LossCommon(K=K, eps=eps, tau=tau, mu=mu, eta=eta, x=x, z=z, p=p, q=q)
 
 # Mean-squared error loss (Brier loss)
 def mse_loss(x):
@@ -102,6 +104,17 @@ def dnll_loss(x, eps, cap):
 	L = -C * ((1 - eps) * torch.log(pT) + eps * torch.log(1 - pT))
 	return L, M
 
+# Relative dual negative log likelihood loss (Inf-norm)
+def rdnlli_loss(x, eps, cap):
+	M = loss_common(x, eps)
+	C = math.sqrt((M.K - 1) / M.K) / M.mu
+	targetpT = torch.amax(M.p[:, 1:].detach(), dim=1, keepdim=True) + M.mu
+	pT = M.p[:, 0:1]
+	if cap:
+		pT = pT.clamp(max=targetpT)
+	L = -C * (targetpT * torch.log(pT) + (1 - targetpT) * torch.log(1 - pT))
+	return L, M
+
 # Relative raw logit loss
 def rrl_loss(x, eps, cap):  # TODO: CTS capping? (do NOT modify input x -> make a copy if necessary)
 	M = loss_common(x, eps)
@@ -121,21 +134,26 @@ def srrl_loss(x, eps, tau, cap):  # TODO: CTS capping? (do NOT modify input x ->
 
 # Loss map
 LOSS_MAP = dict(
+
 	mse=('MSE', lambda x, eps, tau: mse_loss(x)),
 	nll=('NLL', lambda x, eps, tau: nll_loss(x)),
 	focal=('Focal', lambda x, eps, tau: focal_loss(x)),
+
 	kldiv=('KLDiv', lambda x, eps, tau: kldiv_loss(x, eps)),
 	snll=('SNLL', lambda x, eps, tau: snll_loss(x, eps)),
 	dnll=('DNLL', lambda x, eps, tau: dnll_loss(x, eps, cap=False)),
 	dnllcap=('DNLLCap', lambda x, eps, tau: dnll_loss(x, eps, cap=True)),
+
+	rdnlli=('RDNLLI', lambda x, eps, tau: rdnlli_loss(x, eps, cap=False)),
+	rdnllicap=('RDNLLICap', lambda x, eps, tau: rdnlli_loss(x, eps, cap=True)),
+
 	rrl=('RRL', lambda x, eps, tau: rrl_loss(x, eps, cap=False)),
 	rrlcap=('RRLCap', lambda x, eps, tau: rrl_loss(x, eps, cap=True)),
 	srrl=('SRRL', lambda x, eps, tau: srrl_loss(x, eps, tau, cap=False)),
 	srrlcap=('SRRLCap', lambda x, eps, tau: srrl_loss(x, eps, tau, cap=True)),
-	# TODO: Focal loss
+
 	# TODO: Manual-grads-hack loss to get perfect capped z-grads (both saturated and unsaturated)
 	# TODO: Do you need the manual hack if you consider L as function of x instead of z?)
-	# TODO: f(p)log(p)-style loss
 )
 
 #
