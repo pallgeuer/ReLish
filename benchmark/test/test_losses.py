@@ -250,10 +250,11 @@ def gen_two_way(args):
 	return v, x
 
 def gen_split(args, pT):
+	K = args.plot_classes
 	v = torch.linspace(-10, 10, args.plot_points)
-	x = torch.log((1 / pT - 1) / (2 + torch.exp(v))).repeat(args.plot_classes, 1).T
+	x = torch.log((1 / pT - 1) / (K - 2 + torch.exp(v))).repeat(K, 1).T
 	x[:, 0] = 0
-	x[:, 1] = torch.log((1 / pT - 1) / (1 + 2 * torch.exp(-v)))
+	x[:, 1] = torch.log((1 / pT - 1) / (1 + (K - 2) * torch.exp(-v)))
 	return v, x
 
 def gen_split_equil(args):
