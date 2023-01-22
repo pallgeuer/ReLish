@@ -25,7 +25,6 @@ class LossCommon:
 	K: int
 	eps: float
 	tau: float
-	mu: float
 	eta: float
 	x: torch.Tensor
 	z: torch.Tensor
@@ -50,14 +49,13 @@ def loss_common(x, eps=DEFAULT_EPS, tau=AUTO_TAU):
 	K = x.shape[1]
 	if tau == AUTO_TAU:
 		tau = (1 - 1 / (K * (1 - eps))) ** 2
-	mu = 1 - eps - eps / (K - 1)
 	eta = math.log(1 - eps) - math.log(eps / (K - 1))
 	z = x[:, 1:] - x[:, 0:1] + eta
 	p = F.softmax(x, dim=1)
 	q = p.clone()
 	q[:, 0:1] -= 1 - eps
 	q[:, 1:] -= eps / (K - 1)
-	return LossCommon(K=K, eps=eps, tau=tau, mu=mu, eta=eta, x=x, z=z, p=p, q=q)
+	return LossCommon(K=K, eps=eps, tau=tau, eta=eta, x=x, z=z, p=p, q=q)
 
 # Mean-squared error loss (Brier loss)
 def mse_loss(x):
@@ -107,8 +105,24 @@ def dnll_loss(x, eps, cap):
 # Relative dual negative log likelihood loss (Inf-norm)
 def rdnlli_loss(x, eps, cap):
 	M = loss_common(x, eps)
-	C = math.sqrt((M.K - 1) / M.K) / M.mu
-	targetpT = torch.amax(M.p[:, 1:].detach(), dim=1, keepdim=True) + M.mu
+	mu = 1 - eps - eps / (M.K - 1)
+	C = math.sqrt((M.K - 1) / M.K) / mu
+	targetpT = torch.amax(M.p[:, 1:].detach(), dim=1, keepdim=True) + mu
+	pT = M.p[:, 0:1]
+	if cap:
+		pT = pT.clamp(max=targetpT)
+	L = -C * (targetpT * torch.log(pT) + (1 - targetpT) * torch.log(1 - pT))
+	return L, M
+
+# Relative dual negative log likelihood loss (2-norm)
+def rdnll2_loss(x, eps, cap, cgrad):
+	M = loss_common(x, eps)
+	mu = 1 - eps - eps / math.sqrt(M.K - 1)
+	C = math.sqrt((M.K - 1) / M.K) / ((1 - eps - 1 / M.K) * (1 + 1 / math.sqrt(M.K - 1)))
+	pF = M.p[:, 1:]
+	if not cgrad:
+		pF = pF.detach()
+	targetpT = torch.linalg.norm(pF, dim=1, keepdim=True) + mu
 	pT = M.p[:, 0:1]
 	if cap:
 		pT = pT.clamp(max=targetpT)
@@ -125,7 +139,7 @@ def rrl_loss(x, eps, cap):  # TODO: CTS capping? (do NOT modify input x -> make 
 
 # Saturated raw logit loss
 def srrl_loss(x, eps, tau, cap):  # TODO: CTS capping? (do NOT modify input x -> make a copy if necessary)
-	M = loss_common(x, eps, tau)
+	M = loss_common(x, eps, tau=tau)
 	delta = ((1 - M.tau) / M.tau) * ((M.K-1) / M.K) * M.eta * M.eta
 	J = (x[:, 0:1] - M.eta).square() + x[:, 1:].square().sum(dim=1, keepdim=True) - torch.square(x[:, 0:1] - M.eta + x[:, 1:].sum(dim=1, keepdim=True)) / M.K
 	C = 1 / math.sqrt(M.tau)
@@ -146,6 +160,15 @@ LOSS_MAP = dict(
 
 	rdnlli=('RDNLLI', lambda x, eps, tau: rdnlli_loss(x, eps, cap=False)),
 	rdnllicap=('RDNLLICap', lambda x, eps, tau: rdnlli_loss(x, eps, cap=True)),
+	rdnll2=('RDNLL2', lambda x, eps, tau: rdnll2_loss(x, eps, cap=False, cgrad=False)),
+	rdnll2cap=('RDNLL2Cap', lambda x, eps, tau: rdnll2_loss(x, eps, cap=True, cgrad=False)),
+	rdnll2grad=('RDNLL2Grad', lambda x, eps, tau: rdnll2_loss(x, eps, cap=False, cgrad=True)),
+	rdnll2capgrad=('RDNLL2CapGrad', lambda x, eps, tau: rdnll2_loss(x, eps, cap=True, cgrad=True)),
+
+	# TODO: mdnll=('MDNLL', lambda x, eps, tau: mdnll_loss(x, eps, cap=False, cgrad=False)),
+	# mdnllcap=('MDNLLCap', lambda x, eps, tau: mdnll_loss(x, eps, cap=True, cgrad=False)),
+	# mdnllgrad=('MDNLLGrad', lambda x, eps, tau: mdnll_loss(x, eps, cap=False, cgrad=True)),
+	# mdnllcapgrad=('MDNLLCapGrad', lambda x, eps, tau: mdnll_loss(x, eps, cap=True, cgrad=True)),
 
 	rrl=('RRL', lambda x, eps, tau: rrl_loss(x, eps, cap=False)),
 	rrlcap=('RRLCap', lambda x, eps, tau: rrl_loss(x, eps, cap=True)),
@@ -207,7 +230,7 @@ def plot_situation(situation, args):
 
 def generate_plots(v, x, sit_var, sit_name, args):
 
-	M = loss_common(x, args.eps, args.tau)
+	M = loss_common(x, args.eps, tau=args.tau)
 
 	fig, axs = plt.subplots(2, 2, figsize=FIGSIZE)
 	fig.suptitle(f"{sit_name}: Logits and probabilities vs {sit_var}")
@@ -275,10 +298,13 @@ def gen_split(args, pT):
 	x[:, 1] = torch.log((1 / pT - 1) / (1 + (K - 2) * torch.exp(-v)))
 	return v, x
 
+def gen_split_high(args):
+	return gen_split(args, 1 - args.eps / 2)
+
 def gen_split_equil(args):
 	return gen_split(args, 1 - args.eps)
 
-def gen_split_high(args):
+def gen_split_medium(args):
 	return gen_split(args, 0.9 * (1 - args.eps))
 
 def gen_split_low(args):
@@ -287,8 +313,9 @@ def gen_split_low(args):
 SITUATION_MAP = dict(
 	equal_false=('Equal false', 'All xf are zero and xT varies', 'xT', gen_equal_false),
 	two_way=('2-way', 'xT varies for xf1 zero and all other xf significantly negative', 'xT', gen_two_way),
+	split_high=('High split', 'pT = 1-eps/2 and the rest is divided amongst pF and equal pK', 'xd = xF - xK', gen_split_high),
 	split_equil=('Equilibrium split', 'pT = 1-eps and the rest is divided amongst pF and equal pK', 'xd = xF - xK', gen_split_equil),
-	split_high=('High split', 'pT = 0.9*(1-eps) and the rest is divided amongst pF and equal pK', 'xd = xF - xK', gen_split_high),
+	split_med=('Medium split', 'pT = 0.9*(1-eps) and the rest is divided amongst pF and equal pK', 'xd = xF - xK', gen_split_medium),
 	split_low=('Low split', 'pT = 1/K and the rest is divided amongst pF and equal pK', 'xd = xF - xK', gen_split_low),
 )
 
@@ -301,7 +328,7 @@ def main():
 	parser = argparse.ArgumentParser()
 	parser.add_argument('--device', type=str, default='cuda', help='Device to perform calculations on')
 	parser.add_argument('--eps', type=float, default=DEFAULT_EPS, help='Value of epsilon to use (for all but NLL)')
-	parser.add_argument('--tau', type=float, default=0, help='Value of tau to use (for SRRL, 0 = Auto calculate)')
+	parser.add_argument('--tau', type=float, default=AUTO_TAU, help='Value of tau to use (for SRRL, 0 = Auto calculate)')
 	parser.add_argument('--losses', type=str, nargs='+', default=list(LOSS_MAP.keys()), help='List of losses to consider')
 	parser.add_argument('--evalx', type=float, nargs='+', help='Evaluate case where raw logits are as listed (first is true class)')
 	parser.add_argument('--evalp', type=float, nargs='+', help='Evaluate case where probabilities are as listed (first is true class, rescaled to sum to 1)')
