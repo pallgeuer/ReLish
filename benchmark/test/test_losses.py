@@ -86,7 +86,7 @@ def kldiv_loss(x, eps):
 	return L, M
 
 # Label-smoothed negative log likelihood loss
-def snll_loss(x, eps):  # TODO: Is it possible to cap SNLL?
+def snll_loss(x, eps):
 	M = loss_common(x, eps)
 	C = math.sqrt((M.K - 1) / M.K) / (1 - eps - 1 / M.K)
 	L = -C * ((1 - eps) * torch.log(M.p[:, :1]) + (eps / (M.K - 1)) * torch.sum(torch.log(M.p[:, 1:]), dim=1, keepdim=True))
@@ -144,9 +144,13 @@ def mdnll_loss(x, eps, cap, cgrad):
 	return L, M
 
 # Relative raw logit loss
-def rrl_loss(x, eps, cap):  # TODO: CTS capping? (do NOT modify input x -> make a copy if necessary)
+def rrl_loss(x, eps, cap):
 	M = loss_common(x, eps)
-	J = (x[:, :1] - M.eta).square() + x[:, 1:].square().sum(dim=1, keepdim=True) - torch.square(x[:, :1] - M.eta + x[:, 1:].sum(dim=1, keepdim=True)) / M.K
+	z = x - x[:, :1]
+	z[:, 1:] += M.eta
+	if cap:
+		z.clamp_(min=0)
+	J = z.square().sum(dim=1, keepdim=True) - torch.square(z.sum(dim=1, keepdim=True)) / M.K
 	C = math.sqrt(M.K / (M.K - 1)) / (2 * M.eta)
 	L = C * J
 	return L, M
@@ -183,10 +187,14 @@ def mrrl_cap_loss(x, eps):
 	return L, M
 
 # Saturated raw logit loss
-def srrl_loss(x, eps, tau, cap):  # TODO: CTS capping? (do NOT modify input x -> make a copy if necessary)
+def srrl_loss(x, eps, tau, cap):
 	M = loss_common(x, eps, tau=tau)
 	delta = ((1 - M.tau) / M.tau) * ((M.K - 1) / M.K) * M.eta * M.eta
-	J = (x[:, :1] - M.eta).square() + x[:, 1:].square().sum(dim=1, keepdim=True) - torch.square(x[:, :1] - M.eta + x[:, 1:].sum(dim=1, keepdim=True)) / M.K
+	z = x - x[:, :1]
+	z[:, 1:] += M.eta
+	if cap:
+		z.clamp_(min=0)
+	J = z.square().sum(dim=1, keepdim=True) - torch.square(z.sum(dim=1, keepdim=True)) / M.K
 	C = 1 / math.sqrt(M.tau)
 	L = C * torch.sqrt(J + delta)
 	return L, M
@@ -266,7 +274,7 @@ LOSS_MAP = dict(
 	focal=('Focal', lambda x, eps, tau: focal_loss(x)),
 
 	kldiv=('KLDiv', lambda x, eps, tau: kldiv_loss(x, eps)),  # Note: Identical grads to SNLL
-	snll=('SNLL', lambda x, eps, tau: snll_loss(x, eps)),  # TODO: Implement capping
+	snll=('SNLL', lambda x, eps, tau: snll_loss(x, eps)),
 	dnll=('DNLL', lambda x, eps, tau: dnll_loss(x, eps, cap=False)),
 	dnllcap=('DNLLCap', lambda x, eps, tau: dnll_loss(x, eps, cap=True)),
 
@@ -283,11 +291,11 @@ LOSS_MAP = dict(
 	mdnllcapgrad=('MDNLLCapGrad', lambda x, eps, tau: mdnll_loss(x, eps, cap=True, cgrad=True)),  # Note: No loss scaling relative to non-grad, zero grad is not exactly where required, some uncapped return gradients occur
 
 	rrl=('RRL', lambda x, eps, tau: rrl_loss(x, eps, cap=False)),
-	rrlcap=('RRLCap', lambda x, eps, tau: rrl_loss(x, eps, cap=True)),  # TODO: Implement capping
+	rrlcap=('RRLCap', lambda x, eps, tau: rrl_loss(x, eps, cap=True)),
 	mrrlcap=('MRRLCap', lambda x, eps, tau: mrrl_cap_loss(x, eps)),
 
 	srrl=('SRRL', lambda x, eps, tau: srrl_loss(x, eps, tau, cap=False)),
-	srrlcap=('SRRLCap', lambda x, eps, tau: srrl_loss(x, eps, tau, cap=True)),  # TODO: Implement capping
+	srrlcap=('SRRLCap', lambda x, eps, tau: srrl_loss(x, eps, tau, cap=True)),
 	msrrlcap=('MSRRLCap', lambda x, eps, tau: msrrl_cap_loss(x, eps, tau)),
 
 	mesrrlcap=('MESRRLCap', lambda x, eps, tau: mesrrl_cap_loss(x, eps)),
