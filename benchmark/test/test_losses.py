@@ -291,11 +291,11 @@ LOSS_MAP = dict(
 	mdnllcapgrad=('MDNLLCapGrad', lambda x, eps, tau: mdnll_loss(x, eps, cap=True, cgrad=True)),  # Note: No loss scaling relative to non-grad, zero grad is not exactly where required, some uncapped return gradients occur
 
 	rrl=('RRL', lambda x, eps, tau: rrl_loss(x, eps, cap=False)),
-	rrlcap=('RRLCap', lambda x, eps, tau: rrl_loss(x, eps, cap=True)),
+	rrlcap=('RRLCap', lambda x, eps, tau: rrl_loss(x, eps, cap=True)),  # Note: Gradients are not continuous
 	mrrlcap=('MRRLCap', lambda x, eps, tau: mrrl_cap_loss(x, eps)),
 
 	srrl=('SRRL', lambda x, eps, tau: srrl_loss(x, eps, tau, cap=False)),
-	srrlcap=('SRRLCap', lambda x, eps, tau: srrl_loss(x, eps, tau, cap=True)),
+	srrlcap=('SRRLCap', lambda x, eps, tau: srrl_loss(x, eps, tau, cap=True)),  # Note: Gradients are not continuous
 	msrrlcap=('MSRRLCap', lambda x, eps, tau: msrrl_cap_loss(x, eps, tau)),
 
 	mesrrlcap=('MESRRLCap', lambda x, eps, tau: mesrrl_cap_loss(x, eps)),
