@@ -186,7 +186,7 @@ def mrrl_cap_loss(x, eps):
 	L = MRRLCapFunction.apply(x, M)
 	return L, M
 
-# Saturated raw logit loss
+# Saturated relative raw logit loss
 def srrl_loss(x, eps, tau, cap):
 	M = loss_common(x, eps, tau=tau)
 	delta = ((1 - M.tau) / M.tau) * ((M.K - 1) / M.K) * M.eta * M.eta
