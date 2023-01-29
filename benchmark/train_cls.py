@@ -626,7 +626,7 @@ def calc_topk_sum(output, target, topn=5):
 	top_indices = output.topk(min(topn, num_classes), dim=1, largest=True, sorted=True).indices
 	topk_tensor = torch.unsqueeze(target, dim=1).eq(top_indices).cumsum(dim=1).sum(dim=0, dtype=float)
 	topk_tuple = tuple(topk.item() for topk in topk_tensor)
-	return topk_tuple if num_classes >= topn else topk_tuple + (topk_tuple[-1] * (topn - num_classes))
+	return topk_tuple if num_classes >= topn else topk_tuple + ((topk_tuple[-1],) * (topn - num_classes))
 
 # Wait around if paused
 def wait_if_paused(pause_files):
