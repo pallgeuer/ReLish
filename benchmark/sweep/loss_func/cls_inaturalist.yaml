@@ -1,0 +1,37 @@
+program: train_cls.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - ${args_no_boolean_flags}
+project: cls_loss_func
+method: grid
+metric:
+  goal: maximize
+  name: valid_top1_max
+parameters:
+  aaa:
+    min: 1
+    max: 12
+  act_func:
+    value: original
+  amp:
+    value: false
+  batch_size:
+    value: 256
+  dataset:
+    values: ['iNaturalistM-1', 'iNaturalistM-2', 'iNaturalistM-3', 'iNaturalistM-4', 'iNaturalistM-5', 'iNaturalistM-6', 'iNaturalistM-7']
+  dataset_workers:
+    value: 4
+  epochs:
+    value: 80
+  loss:
+    value: nllloss
+  max_batch_size:
+    value: 0
+  model:
+    value: resnet50
+  optimizer:
+    value: adam
+  warmup_epochs:
+    value: 0
