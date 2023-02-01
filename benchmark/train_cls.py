@@ -22,6 +22,7 @@ import torchvision.transforms as transforms
 import wandb
 import models
 import act_funcs
+import loss_funcs
 import util
 
 # Main function
@@ -106,14 +107,14 @@ def main():
 
 		train_loader, valid_loader, num_classes, in_shape, num_batch_accum = load_dataset(C, details=args.dataset_details)
 		model = load_model(C, num_classes, in_shape, details=args.model_details)
-		output_layer, criterion = load_criterion(C)
+		criterion = load_criterion(C, num_classes, details=args.model_details)
 		optimizer = load_optimizer(C, model.parameters())
 		scheduler = load_scheduler(C, optimizer)
 
 		if args.dry:
 			print("Dry run => Would have trained model...")
 		else:
-			train_model(C, train_loader, valid_loader, model, output_layer, criterion, optimizer, scheduler, num_batch_accum, pause_files)
+			train_model(C, train_loader, valid_loader, model, criterion, optimizer, scheduler, num_batch_accum, pause_files)
 
 	print()
 
@@ -421,19 +422,23 @@ def load_model(C, num_classes, in_shape, details=False):
 	return model
 
 # Load the criterion
-def load_criterion(C):
+def load_criterion(C, num_classes, details=False):
 
-	if C.loss == 'nllloss':
-		output_layer = nn.LogSoftmax(dim=1)
-		criterion = nn.NLLLoss(reduction='mean')
+	normed = C.loss.endswith('_')
+	loss = C.loss[:-1] if normed else C.loss
+
+	if loss == 'nllloss':
+		criterion = loss_funcs.NLLLoss(num_classes, normed=normed)
 	else:
 		raise ValueError(f"Invalid criterion/loss specification: {C.loss}")
 
-	if output_layer is not None:
-		output_layer.to(device=C.device)
 	criterion.to(device=C.device)
 
-	return output_layer, criterion
+	if details:
+		print(f"Criterion: {criterion}")
+		print()
+
+	return criterion
 
 # Load the optimizer
 def load_optimizer(C, model_params):
@@ -458,7 +463,7 @@ def load_scheduler(C, optimizer):
 		raise ValueError(f"Invalid learning rate scheduler specification: {C.scheduler}")
 
 # Train the model
-def train_model(C, train_loader, valid_loader, model, output_layer, criterion, optimizer, scheduler, num_batch_accum, pause_files):
+def train_model(C, train_loader, valid_loader, model, criterion, optimizer, scheduler, num_batch_accum, pause_files):
 
 	valid_topk_max = [0] * 5
 	device = torch.device(C.device)
@@ -513,7 +518,7 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 
 			with torch.autocast(device_type=device.type, enabled=amp_enabled):
 				output = model(data)
-				mean_batch_loss = criterion(output if output_layer is None else output_layer(output), target)
+				mean_batch_loss = criterion(output, target)
 				mean_accum_batch_loss = mean_batch_loss / num_batch_accum if batch_num <= num_train_accum_full else mean_batch_loss * (num_in_batch / num_train_accum_samples_last)
 			scaler.scale(mean_accum_batch_loss).backward()
 
@@ -568,7 +573,7 @@ def train_model(C, train_loader, valid_loader, model, output_layer, criterion, o
 
 				with torch.autocast(device_type=device.type, enabled=amp_enabled):
 					output = model(data)
-					mean_batch_loss = criterion(output if output_layer is None else output_layer(output), target)
+					mean_batch_loss = criterion(output, target)
 
 				num_valid_samples += num_in_batch
 				output_cpu = output.detach().to(device=cpu_device, dtype=float)
