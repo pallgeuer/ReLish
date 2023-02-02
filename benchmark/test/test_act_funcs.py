@@ -4,9 +4,9 @@
 # Imports
 from typing import Union
 import argparse
+import matplotlib.pyplot as plt
 import torch
 import act_funcs  # noqa
-import matplotlib.pyplot as plt
 
 # Plot activation functions
 def plot_act_funcs(names=None, device: Union[str, torch.device] = 'cuda'):
