@@ -2,7 +2,9 @@
 # Test various classification losses and how to best implement them
 
 # Imports
+import sys
 import math
+import inspect
 import argparse
 import itertools
 import dataclasses
@@ -10,16 +12,19 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn.functional as F
+import loss_funcs  # noqa
 
 # Constants
 DEFAULT_EPS = 0.20
-AUTO_TAU = 0
+AUTO_TAU_L = -2
+AUTO_TAU_H = -1
 FIGSIZE = (9.6, 5.15)
 
 #
 # Data types
 #
 
+# Common loss term data class
 @dataclasses.dataclass(frozen=True)
 class LossCommon:
 	K: int
@@ -31,6 +36,7 @@ class LossCommon:
 	p: torch.Tensor
 	q: torch.Tensor
 
+# Loss result data class
 @dataclasses.dataclass(frozen=True)
 class LossResult:
 	M: LossCommon
@@ -41,15 +47,89 @@ class LossResult:
 	dLdt: torch.Tensor
 
 #
+# Main
+#
+
+# Main function
+def main():
+
+	parser = argparse.ArgumentParser()
+	parser.add_argument('--device', type=str, default='cuda', help='Device to perform calculations on')
+	parser.add_argument('--eps', type=float, default=DEFAULT_EPS, help='Value of epsilon to use (for all but MSE, NLL, Focal)')
+	parser.add_argument('--tau', type=float, default=AUTO_TAU_L, help='Value of tau to use (for SRRL, MSRRL)')
+	parser.add_argument('--losses', type=str, nargs='+', default=list(LOSS_MAP.keys()), help='List of losses to consider')
+	parser.add_argument('--evalx', type=float, nargs='+', help='Evaluate case where raw logits are as listed (first is true class)')
+	parser.add_argument('--evalp', type=float, nargs='+', help='Evaluate case where probabilities are as listed (first is true class, rescaled to sum to 1)')
+	parser.add_argument('--plot', type=str, nargs='+', help='Situation(s) to provide plots for')
+	parser.add_argument('--plot_points', type=int, default=401, help='Number of points to use for plotting')
+	parser.add_argument('--plot_classes', type=int, default=10, help='Number of classes to use for plotting')
+
+	args = parser.parse_args()
+	args.device = torch.device(args.device)
+
+	if args.evalx:
+		evalx(args.evalx, args)
+
+	if args.evalp:
+		evalx([math.log(item) for item in args.evalp], args)
+
+	if args.plot:
+		for situation in args.plot:
+			plot_situation(situation, args)
+
+#
 # Losses
 #
 
-# Common loss components
-def loss_common(x, eps=DEFAULT_EPS, tau=AUTO_TAU):
+# Auto-populate loss map from loss_funcs module in the format dict[name_lower, tuple(name, loss_factory)]
+LOSS_MAP = {cls_name.removesuffix('Loss').lower(): (cls_name.removesuffix('Loss'), cls_obj) for cls_name, cls_obj in inspect.getmembers(sys.modules['loss_funcs']) if inspect.isclass(cls_obj) and issubclass(cls_obj, loss_funcs.ClassificationLoss)}
+
+# Create a loss module from a loss factory that can be used as Callable[[logits_tensor, target_tensor], loss_tensor]
+def create_loss_module(loss_factory, M):
+	params = dict(num_classes=M.K, normed=True, reduction='none', eps=M.eps, tau=M.tau)
+	factory_param_keys = inspect.signature(loss_factory).parameters.keys()
+	params = {key: value for key, value in params.items() if key in factory_param_keys}
+	return loss_factory(**params)
+
+# Evaluate a loss module on a logits tensor, assuming the first logit is always the true one
+def eval_loss_module(loss_module, x):
+	return loss_module(x, torch.zeros(size=(x.shape[0], *x.shape[2:]), dtype=torch.long, device=x.device))
+
+# OLD START
+def eval_loss_old(x, loss, M):
+	x = x.detach().requires_grad_()
+	L, M = loss(x, M.eps, M.tau)
+	x.grad = None
+	L.sum().backward()
+	# noinspection PyTypeChecker
+	dLdx: torch.Tensor = x.grad
+	dxdt = -dLdx
+	dzdt = dxdt[:, 1:] - dxdt[:, :1]
+	dLdt = -dLdx.square().sum(dim=1, keepdim=True)
+	return LossResult(M=M, x=x, L=L, dxdt=dxdt, dzdt=dzdt, dLdt=dLdt)
+# OLD STOP
+
+# Evaluate a loss module and its gradients on a logits tensor
+def eval_loss_module_grad(loss_module, x, M):
+	x = x.detach().requires_grad_()
+	L = eval_loss_module(loss_module, x)
+	x.grad = None
+	L.sum().backward()
+	# noinspection PyTypeChecker
+	dLdx: torch.Tensor = x.grad
+	dxdt = -dLdx
+	dzdt = dxdt[:, 1:] - dxdt[:, :1]
+	dLdt = -dLdx.square().sum(dim=1, keepdim=True)
+	return LossResult(M=M, x=x, L=L, dxdt=dxdt, dzdt=dzdt, dLdt=dLdt)
+
+# Calculate common loss terms
+def loss_common(x, eps, tau):
 	K = x.shape[1]
-	if tau == AUTO_TAU:
-		tau = (1 - 1 / (K * (1 - eps))) ** 2
 	eta = math.log(1 - eps) - math.log(eps / (K - 1))
+	if tau == AUTO_TAU_L:
+		tau = 1 - ((K - 1) / (K * K)) * eta / (1 - eps - 1 / K)
+	elif tau == AUTO_TAU_H:
+		tau = (1 - 1 / (K * (1 - eps))) ** 2
 	z = x[:, 1:] - x[:, :1] + eta
 	p = F.softmax(x, dim=1)
 	q = p.clone()
@@ -57,44 +137,195 @@ def loss_common(x, eps=DEFAULT_EPS, tau=AUTO_TAU):
 	q[:, 1:] -= eps / (K - 1)
 	return LossCommon(K=K, eps=eps, tau=tau, eta=eta, x=x, z=z, p=p, q=q)
 
+#
+# Evaluate
+#
+
+# Action: Evaluate losses on a list of logits
+def evalx(x, args):
+	x = torch.tensor([x], device=args.device)
+	M = loss_common(x, args.eps, args.tau)
+	for loss_key in args.losses:
+		# OLD START
+		loss_name, loss = LOSS_MAP_OLD[loss_key.lower()]
+		print(f"EVALUATE: {loss_name}")
+		result = eval_loss_old(x, loss, M)
+		print_vec('   x', result.x[0])
+		print_vec('   p', result.M.p[0])
+		print_vec('   L', result.L[0])
+		print_vec('dxdt', result.dxdt[0])
+		print_vec('dzdt', result.dzdt[0])
+		print_vec('dLdt', result.dLdt[0])
+		print()
+		# OLD STOP
+		loss_name, loss_factory = LOSS_MAP[loss_key.lower()]
+		print(f"EVALUATE: {loss_name}")
+		loss_module = create_loss_module(loss_factory, M)
+		result = eval_loss_module_grad(loss_module, x, M)
+		print_vec('   x', result.x[0])
+		print_vec('   p', result.M.p[0])
+		print_vec('   L', result.L[0])
+		print_vec('dxdt', result.dxdt[0])
+		print_vec('dzdt', result.dzdt[0])
+		print_vec('dLdt', result.dLdt[0])
+		print()
+
+# Print a tensor vector
+def print_vec(name, vec, fmt='7.4f'):
+	if vec.ndim == 0:
+		print(f"{name} = {vec:{fmt}}")
+	else:
+		print(f"{name} = [{', '.join(f'{item:{fmt}}' for item in vec)}]")
+
+#
+# Plot
+#
+
+# Action: Plot a situation
+def plot_situation(situation, args):
+	sit_name, sit_desc, sit_var, sit_gen = SITUATION_MAP[situation.lower()]
+	print(f"SITUATION:   {sit_name}")
+	print(f"Description: {sit_desc}")
+	v, x = sit_gen(args)
+	generate_plots(v, x, sit_var, sit_name, args)
+	print()
+
+# Generate the plots for a situation
+def generate_plots(v, x, sit_var, sit_name, args):
+
+	M = loss_common(x, args.eps, args.tau)
+
+	fig, axs = plt.subplots(2, 2, figsize=FIGSIZE)
+	fig.suptitle(f"{sit_name}: Logits and probabilities vs {sit_var}")
+	for i, (data, label) in enumerate(((x[:, :3], 'x'), (M.z[:, :2], 'z = xf - xT + eta'), (M.p[:, :3], 'p'), (M.q[:, :3], 'q = p - ptarget'))):
+		ax = axs[np.unravel_index(i, axs.shape)]
+		ax.plot(v, data.detach().cpu().numpy())
+		ax.grid(visible=True)
+		ax.autoscale(axis='x', tight=True)
+		ax.legend([label[0] + sub for sub in ('T', 'F', 'K')[-data.shape[1]:]], loc='best')
+		ax.set_title(label)
+	fig.tight_layout()
+
+	figX, axsX = plt.subplots(1, 3, figsize=FIGSIZE)
+	figZ, axsZ = plt.subplots(1, 2, figsize=FIGSIZE)
+	figL, axsL = plt.subplots(1, 2, figsize=FIGSIZE)
+	figX.suptitle(f"{sit_name}: Logit update rate vs {sit_var}")
+	figZ.suptitle(f"{sit_name}: Relative logit update rate vs {sit_var}")
+	figL.suptitle(f"{sit_name}: Loss value and rate vs {sit_var}")
+	for loss_key in args.losses:
+		# OLD START
+		loss_name, loss = LOSS_MAP_OLD[loss_key.lower()]
+		result = eval_loss_old(x, loss, M)
+		for i in range(3):
+			axsX[i].plot(v, result.dxdt[:, i].detach().cpu().numpy(), label=loss_name)
+		for i in range(2):
+			axsZ[i].plot(v, result.dzdt[:, i].detach().cpu().numpy(), label=loss_name)
+		for i, data in enumerate((result.L, result.dLdt)):
+			axsL[i].plot(v, data.detach().cpu().numpy(), label=loss_name)
+		# OLD STOP
+		loss_name, loss_factory = LOSS_MAP[loss_key.lower()]
+		loss_module = create_loss_module(loss_factory, M)
+		result = eval_loss_module_grad(loss_module, x, M)
+		for i in range(3):
+			axsX[i].plot(v, result.dxdt[:, i].detach().cpu().numpy(), label=loss_name)
+		for i in range(2):
+			axsZ[i].plot(v, result.dzdt[:, i].detach().cpu().numpy(), label=loss_name)
+		for i, data in enumerate((result.L, result.dLdt)):
+			axsL[i].plot(v, data.detach().cpu().numpy(), label=loss_name)
+	for ax, title in zip(
+			itertools.chain(axsX.flatten(), axsZ.flatten(), axsL.flatten()),
+			('dxT/dt', 'dxF/dt', 'dxK/dt', 'dzF/dt', 'dzK/dt', 'L', 'dL/dt'),
+	):
+		ax.grid(visible=True)
+		ax.autoscale(axis='x', tight=True)
+		ax.legend(loc='best')
+		ax.set_title(title)
+	figX.tight_layout()
+	figZ.tight_layout()
+	figL.tight_layout()
+
+	plt.show()
+
+#
+# Situations
+#
+
+# Situation: All xf are zero and xT varies
+def gen_equal_false(args):
+	v = torch.linspace(-10, 10, args.plot_points)
+	x = torch.zeros((args.plot_points, args.plot_classes), device=args.device)
+	x[:, 0] = v
+	return v, x
+
+# Situation: xT varies for xf1 zero and all other xf significantly negative
+def gen_two_way(args):
+	v = torch.linspace(-10, 10, args.plot_points)
+	x = torch.full((args.plot_points, args.plot_classes), fill_value=-30.0, device=args.device)
+	x[:, 0] = v
+	x[:, 1] = 0
+	return v, x
+
+# Situation: pT = const and the rest is divided amongst pF and equal pK
+def gen_split(args, pT):
+	K = args.plot_classes
+	v = torch.linspace(-10, 10, args.plot_points)
+	x = torch.log((1 / pT - 1) / (K - 2 + torch.exp(v))).repeat(K, 1).T
+	x[:, 0] = 0
+	x[:, 1] = torch.log((1 / pT - 1) / (1 + (K - 2) * torch.exp(-v)))
+	return v, x
+
+# Situation map
+SITUATION_MAP = dict(
+	equal_false=('Equal false', 'All xf are zero and xT varies', 'xT', gen_equal_false),
+	two_way=('2-way', 'xT varies for xf1 zero and all other xf significantly negative', 'xT', gen_two_way),
+	split_high=('High split', 'pT = 1-eps/2 and the rest is divided amongst pF and equal pK', 'xd = xF - xK', lambda args: gen_split(args, 1 - args.eps / 2)),
+	split_equil=('Equilibrium split', 'pT = 1-eps and the rest is divided amongst pF and equal pK', 'xd = xF - xK', lambda args: gen_split(args, 1 - args.eps)),
+	split_med=('Medium split', 'pT = 0.9*(1-eps) and the rest is divided amongst pF and equal pK', 'xd = xF - xK', lambda args: gen_split(args, 0.9 * (1 - args.eps))),
+	split_low=('Low split', 'pT = 1/K and the rest is divided amongst pF and equal pK', 'xd = xF - xK', lambda args: gen_split(args, 1 / args.plot_classes)),
+)
+
+#
+# OLD START
+#
+
 # Mean-squared error loss (Brier loss)
 def mse_loss(x):
-	M = loss_common(x)
+	M = loss_common(x, DEFAULT_EPS, AUTO_TAU_L)
 	C = math.sqrt(M.K / (M.K - 1)) * (27 / 8)
 	L = C * (1 - M.p[:, :1]).square()
 	return L, M
 
 # Negative log likelihood loss
 def nll_loss(x):
-	M = loss_common(x)
+	M = loss_common(x, DEFAULT_EPS, AUTO_TAU_L)
 	C = math.sqrt(M.K / (M.K - 1))
 	L = -C * torch.log(M.p[:, :1])
 	return L, M
 
 # Focal loss
 def focal_loss(x):
-	M = loss_common(x)
+	M = loss_common(x, DEFAULT_EPS, AUTO_TAU_L)
 	C = math.sqrt(M.K / (M.K - 1)) * (M.K ** 2) / ((M.K - 1) * (M.K - 1 + 2 * math.log(M.K)))
 	L = -C * (1 - M.p[:, :1]).square() * torch.log(M.p[:, :1])  # Note: gamma = 2
 	return L, M
 
 # Kullback-Leibler divergence loss
 def kldiv_loss(x, eps):
-	M = loss_common(x, eps)
+	M = loss_common(x, eps, AUTO_TAU_L)
 	C = math.sqrt((M.K - 1) / M.K) / (1 - eps - 1 / M.K)
 	L = C * ((1 - eps) * (math.log(1 - eps) - torch.log(M.p[:, :1])) + (eps / (M.K - 1)) * torch.sum(math.log(eps / (M.K - 1)) - torch.log(M.p[:, 1:]), dim=1, keepdim=True))
 	return L, M
 
 # Label-smoothed negative log likelihood loss
 def snll_loss(x, eps):
-	M = loss_common(x, eps)
+	M = loss_common(x, eps, AUTO_TAU_L)
 	C = math.sqrt((M.K - 1) / M.K) / (1 - eps - 1 / M.K)
 	L = -C * ((1 - eps) * torch.log(M.p[:, :1]) + (eps / (M.K - 1)) * torch.sum(torch.log(M.p[:, 1:]), dim=1, keepdim=True))
 	return L, M
 
 # Dual negative log likelihood loss
 def dnll_loss(x, eps, cap):
-	M = loss_common(x, eps)
+	M = loss_common(x, eps, AUTO_TAU_L)
 	C = math.sqrt((M.K - 1) / M.K) / (1 - eps - 1 / M.K)
 	pT = M.p[:, :1]
 	if cap:
@@ -104,7 +335,7 @@ def dnll_loss(x, eps, cap):
 
 # Relative dual negative log likelihood loss (Inf-norm)
 def rdnlli_loss(x, eps, cap):
-	M = loss_common(x, eps)
+	M = loss_common(x, eps, AUTO_TAU_L)
 	mu = 1 - eps - eps / (M.K - 1)
 	C = math.sqrt((M.K - 1) / M.K) / mu
 	targetpT = torch.amax(M.p[:, 1:].detach(), dim=1, keepdim=True) + mu
@@ -116,7 +347,7 @@ def rdnlli_loss(x, eps, cap):
 
 # Relative dual negative log likelihood loss (2-norm)
 def rdnll2_loss(x, eps, cap, cgrad):
-	M = loss_common(x, eps)
+	M = loss_common(x, eps, AUTO_TAU_L)
 	mu = 1 - eps - eps / math.sqrt(M.K - 1)
 	C = math.sqrt((M.K - 1) / M.K) / ((1 - eps - 1 / M.K) * (1 + 1 / math.sqrt(M.K - 1)))
 	pF = M.p[:, 1:]
@@ -131,7 +362,7 @@ def rdnll2_loss(x, eps, cap, cgrad):
 
 # Max-logit dual negative log likelihood loss
 def mdnll_loss(x, eps, cap, cgrad):
-	M = loss_common(x, eps)
+	M = loss_common(x, eps, AUTO_TAU_L)
 	C = 0.5 * math.sqrt((M.K - 1) / M.K) / (1 - eps - 1 / M.K)
 	pTD = M.p[:, :1]
 	if not cgrad:
@@ -145,7 +376,7 @@ def mdnll_loss(x, eps, cap, cgrad):
 
 # Relative raw logit loss
 def rrl_loss(x, eps, cap):
-	M = loss_common(x, eps)
+	M = loss_common(x, eps, AUTO_TAU_L)
 	z = x - x[:, :1]
 	z[:, 1:] += M.eta
 	if cap:
@@ -182,7 +413,7 @@ class MRRLCapFunction(torch.autograd.Function):
 
 # Manually capped relative raw logit loss
 def mrrl_cap_loss(x, eps):
-	M = loss_common(x, eps)
+	M = loss_common(x, eps, AUTO_TAU_L)
 	L = MRRLCapFunction.apply(x, M)
 	return L, M
 
@@ -263,12 +494,12 @@ class MESRRLCapFunction(torch.autograd.Function):
 
 # Manually capped exponentially saturated raw logit loss
 def mesrrl_cap_loss(x, eps):
-	M = loss_common(x, eps)
+	M = loss_common(x, eps, AUTO_TAU_L)
 	L = MESRRLCapFunction.apply(x, M)
 	return L, M
 
 # Loss map
-LOSS_MAP = dict(
+LOSS_MAP_OLD = dict(
 	mse=('MSE', lambda x, eps, tau: mse_loss(x)),
 	nll=('NLL', lambda x, eps, tau: nll_loss(x)),
 	focal=('Focal', lambda x, eps, tau: focal_loss(x)),
@@ -300,177 +531,7 @@ LOSS_MAP = dict(
 
 	mesrrlcap=('MESRRLCap', lambda x, eps, tau: mesrrl_cap_loss(x, eps)),
 )
-
-#
-# Evaluate
-#
-
-def evalx(x, args):
-	x = torch.tensor([x], device=args.device)
-	for loss_name, loss in LOSS_MAP.values():
-		if loss_name not in args.losses:
-			continue
-		print(f"EVALUATE: {loss_name}")
-		result = eval_loss(x, loss, args)
-		print_vec('   x', result.x[0])
-		print_vec('   p', result.M.p[0])
-		print_vec('   L', result.L[0])
-		print_vec('dxdt', result.dxdt[0])
-		print_vec('dzdt', result.dzdt[0])
-		print_vec('dLdt', result.dLdt[0])
-		print()
-
-def eval_loss(x, loss, args):
-	x = x.detach().requires_grad_()
-	L, M = loss(x, args.eps, args.tau)
-	x.grad = None
-	L.sum().backward()
-	# noinspection PyTypeChecker
-	dLdx: torch.Tensor = x.grad
-	dxdt = -dLdx
-	dzdt = dxdt[:, 1:] - dxdt[:, :1]
-	dLdt = -dLdx.square().sum(dim=1, keepdim=True)
-	return LossResult(M=M, x=x, L=L, dxdt=dxdt, dzdt=dzdt, dLdt=dLdt)
-
-def print_vec(name, vec, fmt='7.4f'):
-	if vec.ndim == 0:
-		print(f"{name} = {vec:{fmt}}")
-	else:
-		print(f"{name} = [{', '.join(f'{item:{fmt}}' for item in vec)}]")
-
-#
-# Plot
-#
-
-def plot_situation(situation, args):
-	sit_name, sit_desc, sit_var, sit_gen = SITUATION_MAP[situation.lower()]
-	print(f"SITUATION:   {sit_name}")
-	print(f"Description: {sit_desc}")
-	v, x = sit_gen(args)
-	generate_plots(v, x, sit_var, sit_name, args)
-	print()
-
-def generate_plots(v, x, sit_var, sit_name, args):
-
-	M = loss_common(x, args.eps, tau=args.tau)
-
-	fig, axs = plt.subplots(2, 2, figsize=FIGSIZE)
-	fig.suptitle(f"{sit_name}: Logits and probabilities vs {sit_var}")
-	for i, (data, label) in enumerate(((x[:, :3], 'x'), (M.z[:, :2], 'z = xf - xT + eta'), (M.p[:, :3], 'p'), (M.q[:, :3], 'q = p - ptarget'))):
-		ax = axs[np.unravel_index(i, axs.shape)]
-		ax.plot(v, data.detach().cpu().numpy())
-		ax.grid(visible=True)
-		ax.autoscale(axis='x', tight=True)
-		ax.legend([label[0] + sub for sub in ('T', 'F', 'K')[-data.shape[1]:]], loc='best')
-		ax.set_title(label)
-	fig.tight_layout()
-
-	figX, axsX = plt.subplots(1, 3, figsize=FIGSIZE)
-	figZ, axsZ = plt.subplots(1, 2, figsize=FIGSIZE)
-	figL, axsL = plt.subplots(1, 2, figsize=FIGSIZE)
-	figX.suptitle(f"{sit_name}: Logit update rate vs {sit_var}")
-	figZ.suptitle(f"{sit_name}: Relative logit update rate vs {sit_var}")
-	figL.suptitle(f"{sit_name}: Loss value and rate vs {sit_var}")
-	for loss_name, loss in LOSS_MAP.values():
-		if loss_name not in args.losses:
-			continue
-		result = eval_loss(x, loss, args)
-		for i in range(3):
-			axsX[i].plot(v, result.dxdt[:, i].detach().cpu().numpy(), label=loss_name)
-		for i in range(2):
-			axsZ[i].plot(v, result.dzdt[:, i].detach().cpu().numpy(), label=loss_name)
-		for i, data in enumerate((result.L, result.dLdt)):
-			axsL[i].plot(v, data.detach().cpu().numpy(), label=loss_name)
-	for ax, title in zip(
-			itertools.chain(axsX.flatten(), axsZ.flatten(), axsL.flatten()),
-			('dxT/dt', 'dxF/dt', 'dxK/dt', 'dzF/dt', 'dzK/dt', 'L', 'dL/dt'),
-	):
-		ax.grid(visible=True)
-		ax.autoscale(axis='x', tight=True)
-		ax.legend(loc='best')
-		ax.set_title(title)
-	figX.tight_layout()
-	figZ.tight_layout()
-	figL.tight_layout()
-
-	plt.show()
-
-#
-# Situations
-#
-
-def gen_equal_false(args):
-	v = torch.linspace(-10, 10, args.plot_points)
-	x = torch.zeros((args.plot_points, args.plot_classes), device=args.device)
-	x[:, 0] = v
-	return v, x
-
-def gen_two_way(args):
-	v = torch.linspace(-10, 10, args.plot_points)
-	x = torch.full((args.plot_points, args.plot_classes), fill_value=-30.0, device=args.device)
-	x[:, 0] = v
-	x[:, 1] = 0
-	return v, x
-
-def gen_split(args, pT):
-	K = args.plot_classes
-	v = torch.linspace(-10, 10, args.plot_points)
-	x = torch.log((1 / pT - 1) / (K - 2 + torch.exp(v))).repeat(K, 1).T
-	x[:, 0] = 0
-	x[:, 1] = torch.log((1 / pT - 1) / (1 + (K - 2) * torch.exp(-v)))
-	return v, x
-
-def gen_split_high(args):
-	return gen_split(args, 1 - args.eps / 2)
-
-def gen_split_equil(args):
-	return gen_split(args, 1 - args.eps)
-
-def gen_split_medium(args):
-	return gen_split(args, 0.9 * (1 - args.eps))
-
-def gen_split_low(args):
-	return gen_split(args, 1 / args.plot_classes)
-
-SITUATION_MAP = dict(
-	equal_false=('Equal false', 'All xf are zero and xT varies', 'xT', gen_equal_false),
-	two_way=('2-way', 'xT varies for xf1 zero and all other xf significantly negative', 'xT', gen_two_way),
-	split_high=('High split', 'pT = 1-eps/2 and the rest is divided amongst pF and equal pK', 'xd = xF - xK', gen_split_high),
-	split_equil=('Equilibrium split', 'pT = 1-eps and the rest is divided amongst pF and equal pK', 'xd = xF - xK', gen_split_equil),
-	split_med=('Medium split', 'pT = 0.9*(1-eps) and the rest is divided amongst pF and equal pK', 'xd = xF - xK', gen_split_medium),
-	split_low=('Low split', 'pT = 1/K and the rest is divided amongst pF and equal pK', 'xd = xF - xK', gen_split_low),
-)
-
-#
-# Main
-#
-
-def main():
-
-	parser = argparse.ArgumentParser()
-	parser.add_argument('--device', type=str, default='cuda', help='Device to perform calculations on')
-	parser.add_argument('--eps', type=float, default=DEFAULT_EPS, help='Value of epsilon to use (for all but NLL)')
-	parser.add_argument('--tau', type=float, default=AUTO_TAU, help='Value of tau to use (for SRRL, 0 = Auto calculate)')
-	parser.add_argument('--losses', type=str, nargs='+', default=list(LOSS_MAP.keys()), help='List of losses to consider')
-	parser.add_argument('--evalx', type=float, nargs='+', help='Evaluate case where raw logits are as listed (first is true class)')
-	parser.add_argument('--evalp', type=float, nargs='+', help='Evaluate case where probabilities are as listed (first is true class, rescaled to sum to 1)')
-	parser.add_argument('--plot', type=str, nargs='+', help='Situation(s) to provide plots for')
-	parser.add_argument('--plot_points', type=int, default=401, help='Number of points to use for plotting')
-	parser.add_argument('--plot_classes', type=int, default=10, help='Number of classes to use for plotting')
-
-	args = parser.parse_args()
-	args.device = torch.device(args.device)
-	args.losses = [LOSS_MAP[loss_key.lower()][0] for loss_key in args.losses]
-
-	if args.evalx:
-		evalx(args.evalx, args)
-
-	if args.evalp:
-		evalx([math.log(item) for item in args.evalp], args)
-
-	if args.plot:
-		for situation in args.plot:
-			plot_situation(situation, args)
+# OLD STOP
 
 # Run main function
 if __name__ == "__main__":
