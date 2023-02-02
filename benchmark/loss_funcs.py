@@ -36,6 +36,14 @@ class ClassificationLoss(nn.Module):
 		# Note: Normalisation is already handled in forward(), but take care to implement self.reduction
 		raise NotImplementedError
 
+	def reduce_loss(self, loss):
+		if self.reduction == 'mean':
+			return torch.mean(loss)
+		elif self.reduction == 'sum':
+			return torch.sum(loss)
+		else:
+			return loss
+
 # Mean-squared error loss (Brier loss)
 # TODO: Implement variant where all probabilities are used (mean over K), not just pT (i.e. add pF^2 and divide total by K)
 class MSELoss(ClassificationLoss):
@@ -45,14 +53,9 @@ class MSELoss(ClassificationLoss):
 		super().__init__(num_classes, normed, norm_scale, reduction)
 
 	def loss(self, logits, target):
-		log_probs = F.log_softmax(logits, dim=1)
-		log_probs_true = log_probs.gather(dim=1, index=target.unsqueeze(dim=1))
-		loss = (1 - log_probs_true).square_()
-		if self.reduction == 'mean':  # TODO: If this is needed in many implementations, put something to this effect as a method in the base class
-			loss = torch.mean(loss)
-		elif self.reduction == 'sum':
-			loss = torch.sum(loss)
-		return loss
+		probs = F.softmax(logits, dim=1)
+		probs_true = probs.gather(dim=1, index=target.unsqueeze(dim=1))
+		return self.reduce_loss((1 - probs_true).square_())
 
 # Negative log likelihood loss
 class NLLLoss(ClassificationLoss):
