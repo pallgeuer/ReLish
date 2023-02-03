@@ -6,6 +6,7 @@ import sys
 import math
 import inspect
 import argparse
+import functools
 import itertools
 import dataclasses
 import matplotlib.pyplot as plt
@@ -82,7 +83,21 @@ def main():
 #
 
 # Auto-populate loss map from loss_funcs module in the format dict[name_lower, tuple(name, loss_factory)]
-LOSS_MAP = {cls_name.removesuffix('Loss').lower(): (cls_name.removesuffix('Loss'), cls_obj) for cls_name, cls_obj in inspect.getmembers(sys.modules['loss_funcs']) if inspect.isclass(cls_obj) and issubclass(cls_obj, loss_funcs.ClassificationLoss)}
+def generate_loss_map():
+	loss_map = {}
+	for cls_name, cls_obj in inspect.getmembers(sys.modules['loss_funcs']):
+		if inspect.isclass(cls_obj) and cls_obj is not loss_funcs.ClassificationLoss and issubclass(cls_obj, loss_funcs.ClassificationLoss):
+			loss_name = cls_name.removesuffix('Loss')
+			loss_params = inspect.signature(cls_obj).parameters.keys()
+			extra_params = []
+			if 'all_probs' in loss_params:
+				extra_params.append(('all_probs', (('', False), ('All', True))))
+			for extra_values in itertools.product(*(param[1] for param in extra_params)):
+				extra_loss_name = loss_name + ''.join(value[0] for value in extra_values)
+				extra_param_dict = dict(zip((param[0] for param in extra_params), (value[1] for value in extra_values)))
+				loss_map[extra_loss_name.lower()] = (extra_loss_name, functools.partial(cls_obj, **extra_param_dict) if extra_param_dict else cls_obj)
+	return loss_map
+LOSS_MAP = generate_loss_map()
 
 # Create a loss module from a loss factory that can be used as Callable[[logits_tensor, target_tensor], loss_tensor]
 def create_loss_module(loss_factory, M):
@@ -147,16 +162,17 @@ def evalx(x, args):
 	M = loss_common(x, args.eps, args.tau)
 	for loss_key in args.losses:
 		# OLD START
-		loss_name, loss = LOSS_MAP_OLD[loss_key.lower()]
-		print(f"EVALUATE: {loss_name}")
-		result = eval_loss_old(x, loss, M)
-		print_vec('   x', result.x[0])
-		print_vec('   p', result.M.p[0])
-		print_vec('   L', result.L[0])
-		print_vec('dxdt', result.dxdt[0])
-		print_vec('dzdt', result.dzdt[0])
-		print_vec('dLdt', result.dLdt[0])
-		print()
+		if loss_key.lower() in LOSS_MAP_OLD:
+			loss_name, loss = LOSS_MAP_OLD[loss_key.lower()]
+			print(f"EVALUATE: {loss_name}")
+			result = eval_loss_old(x, loss, M)
+			print_vec('   x', result.x[0])
+			print_vec('   p', result.M.p[0])
+			print_vec('   L', result.L[0])
+			print_vec('dxdt', result.dxdt[0])
+			print_vec('dzdt', result.dzdt[0])
+			print_vec('dLdt', result.dLdt[0])
+			print()
 		# OLD STOP
 		loss_name, loss_factory = LOSS_MAP[loss_key.lower()]
 		print(f"EVALUATE: {loss_name}")
@@ -214,14 +230,15 @@ def generate_plots(v, x, sit_var, sit_name, args):
 	figL.suptitle(f"{sit_name}: Loss value and rate vs {sit_var}")
 	for loss_key in args.losses:
 		# OLD START
-		loss_name, loss = LOSS_MAP_OLD[loss_key.lower()]
-		result = eval_loss_old(x, loss, M)
-		for i in range(3):
-			axsX[i].plot(v, result.dxdt[:, i].detach().cpu().numpy(), label=loss_name)
-		for i in range(2):
-			axsZ[i].plot(v, result.dzdt[:, i].detach().cpu().numpy(), label=loss_name)
-		for i, data in enumerate((result.L, result.dLdt)):
-			axsL[i].plot(v, data.detach().cpu().numpy(), label=loss_name)
+		if loss_key.lower() in LOSS_MAP_OLD:
+			loss_name, loss = LOSS_MAP_OLD[loss_key.lower()]
+			result = eval_loss_old(x, loss, M)
+			for i in range(3):
+				axsX[i].plot(v, result.dxdt[:, i].detach().cpu().numpy(), label=loss_name)
+			for i in range(2):
+				axsZ[i].plot(v, result.dzdt[:, i].detach().cpu().numpy(), label=loss_name)
+			for i, data in enumerate((result.L, result.dLdt)):
+				axsL[i].plot(v, data.detach().cpu().numpy(), label=loss_name)
 		# OLD STOP
 		loss_name, loss_factory = LOSS_MAP[loss_key.lower()]
 		loss_module = create_loss_module(loss_factory, M)
