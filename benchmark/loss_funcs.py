@@ -45,17 +45,24 @@ class ClassificationLoss(nn.Module):
 			return loss
 
 # Mean-squared error loss (Brier loss)
-# TODO: Implement variant where all probabilities are used (mean over K), not just pT (i.e. add pF^2 and divide total by K)
 class MSELoss(ClassificationLoss):
 
-	def __init__(self, num_classes, normed=True, reduction='mean'):
-		norm_scale = math.sqrt(num_classes / (num_classes - 1)) * (27 / 8)
+	def __init__(self, num_classes, normed=True, reduction='mean', all_probs=False):
+		self.all_probs = all_probs
+		norm_scale = (27 / 8) * math.sqrt((num_classes - 1) / num_classes) if self.all_probs else (27 / 8) * math.sqrt(num_classes / (num_classes - 1))
 		super().__init__(num_classes, normed, norm_scale, reduction)
+
+	def extra_repr(self):
+		return super().extra_repr() + f", all={self.all_probs}"
 
 	def loss(self, logits, target):
 		probs = F.softmax(logits, dim=1)
-		probs_true = probs.gather(dim=1, index=target.unsqueeze(dim=1))
-		return self.reduce_loss((1 - probs_true).square_())
+		if self.all_probs:
+			probs = probs.scatter_add(dim=1, index=target.unsqueeze(dim=1), src=probs.new_full((probs.shape[0], 1, *probs.shape[2:]), -1))
+			return self.reduce_loss(probs.square_().sum(dim=1))
+		else:
+			probs_true = probs.gather(dim=1, index=target.unsqueeze(dim=1))
+			return self.reduce_loss(probs_true.sub_(1).square_())
 
 # Negative log likelihood loss
 class NLLLoss(ClassificationLoss):
