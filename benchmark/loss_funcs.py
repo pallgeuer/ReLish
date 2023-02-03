@@ -4,9 +4,10 @@
 import sys
 import math
 import inspect
+import warnings
 import functools
 import itertools
-from typing import Callable
+from typing import Callable, Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -82,7 +83,17 @@ class NLLLoss(ClassificationLoss):
 	def loss(self, logits, target):
 		return F.cross_entropy(logits, target, reduction=self.reduction)
 
-# TODO: Focal loss
+# Focal loss
+class FocalLoss(ClassificationLoss):
+
+	def __init__(self, num_classes, normed=True, reduction='mean'):
+		norm_scale = math.sqrt(num_classes / (num_classes - 1)) * (num_classes ** 2) / ((num_classes - 1) * (num_classes - 1 + 2 * math.log(num_classes)))
+		super().__init__(num_classes, normed, norm_scale, reduction)
+
+	def loss(self, logits, target):
+		probs = F.softmax(logits, dim=1)
+		probs_true = probs.gather(dim=1, index=target.unsqueeze(dim=1)).squeeze(dim=1)
+		return self.reduce_loss(F.cross_entropy(logits, target, reduction='none').mul_(probs_true.sub_(1).square_()))
 
 # Kullback-Leibler divergence loss
 # Note: Has identical grads to SNLL
@@ -115,7 +126,22 @@ class SNLLLoss(ClassificationLoss):
 	def loss(self, logits, target):
 		return F.cross_entropy(logits, target, reduction=self.reduction, label_smoothing=self.label_smoothing)
 
-# TODO: Continue with DNLL[Cap]
+# Dual negative log likelihood loss
+class DNLLLoss(ClassificationLoss):
+
+	def __init__(self, num_classes, normed=True, reduction='mean', eps=DEFAULT_EPS, cap=True):
+		norm_scale = math.sqrt((num_classes - 1) / num_classes) / (1 - eps - 1 / num_classes)
+		super().__init__(num_classes, normed, norm_scale, reduction, eps=eps, cap=cap)
+		self.max_log_prob = math.log(1 - eps)
+		self.min_log_prob_comp = math.log(eps)
+
+	def loss(self, logits, target):
+		log_probs, log_probs_comp = DualLogSoftmaxFunction.apply(logits, 1)
+		if self.cap:
+			log_probs.clamp_(max=self.max_log_prob)
+			log_probs_comp.clamp_(min=self.min_log_prob_comp)
+		item_loss = log_probs.add_(log_probs_comp.sub_(log_probs), alpha=self.eps)
+		return F.nll_loss(item_loss, target, reduction=self.reduction)
 
 #
 # Loss maps
@@ -131,6 +157,8 @@ def generate_loss_map() -> dict[str, tuple[str, Callable]]:
 			extra_params = []
 			if 'all_probs' in loss_params:
 				extra_params.append(('all_probs', (('', False), ('All', True))))
+			if 'cap' in loss_params:
+				extra_params.append(('cap', (('', False), ('Cap', True))))
 			for extra_values in itertools.product(*(param[1] for param in extra_params)):
 				extra_loss_name = loss_name + ''.join(value[0] for value in extra_values)
 				extra_param_dict = dict(zip((param[0] for param in extra_params), (value[1] for value in extra_values)))
@@ -138,4 +166,59 @@ def generate_loss_map() -> dict[str, tuple[str, Callable]]:
 	# noinspection PyTypeChecker
 	return dict(sorted(loss_map.items()))
 LOSSES = generate_loss_map()
+
+#
+# Helper modules
+#
+
+# Dual log softmax autograd function
+# noinspection PyMethodOverriding, PyAbstractClass
+class DualLogSoftmaxFunction(torch.autograd.Function):
+
+	@staticmethod
+	def forward(ctx, inp, dim):
+		ctx.set_materialize_grads(False)
+		ctx.dim = dim
+		stable_inp = inp.sub(inp.amax(dim=dim, keepdim=True))
+		temp_exp = stable_inp.exp()
+		temp_sumexp = temp_exp.sum(dim=dim, keepdim=True)
+		logsumexp = temp_sumexp.log()
+		neg_softmax = temp_exp.div_(temp_sumexp.neg_())
+		ctx.save_for_backward(neg_softmax)
+		return stable_inp.sub_(logsumexp), neg_softmax.log1p()
+
+	@staticmethod
+	@torch.autograd.function.once_differentiable
+	def backward(ctx, grad_logsoft, grad_logcompsoft):
+		if not ctx.needs_input_grad[0]:
+			return None, None
+		neg_softmax, = ctx.saved_tensors
+		if grad_logsoft is not None:
+			grad_inp_logsoft = grad_logsoft.sum(dim=ctx.dim, keepdim=True).mul(neg_softmax).add_(grad_logsoft)
+		else:
+			grad_inp_logsoft = None
+		if grad_logcompsoft is not None:
+			grad_scaled = grad_logcompsoft.mul(neg_softmax).div_(neg_softmax.add(1))
+			grad_inp_logcompsoft = grad_scaled.sum(dim=ctx.dim, keepdim=True).mul(neg_softmax).add_(grad_scaled)
+		else:
+			grad_inp_logcompsoft = None
+		if grad_inp_logsoft is not None and grad_inp_logcompsoft is not None:
+			return grad_inp_logsoft.add_(grad_inp_logcompsoft), None
+		elif grad_inp_logsoft is not None:
+			return grad_inp_logsoft, None
+		elif grad_inp_logcompsoft is not None:
+			return grad_inp_logcompsoft, None
+		else:
+			return None, None
+
+# Dual log softmax functional
+def dual_log_softmax(inp: torch.Tensor, dim: Optional[int] = None) -> tuple[torch.Tensor, torch.Tensor]:
+	if dim is None:
+		dim = _get_softmax_dim("dual_log_softmax", inp.ndim)
+	return DualLogSoftmaxFunction.apply(inp, dim)
+
+# Automatic dimension choice for softmax
+def _get_softmax_dim(name: str, ndim: int) -> int:
+	warnings.warn(f"Implicit dimension choice for {name} has been deprecated. Change the call to include dim=X as an argument.")
+	return 0 if ndim == 0 or ndim == 1 or ndim == 3 else 1
 # EOF

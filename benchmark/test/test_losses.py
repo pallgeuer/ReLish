@@ -57,6 +57,7 @@ def main():
 	parser.add_argument('--eps', type=float, default=DEFAULT_EPS, help='Value of epsilon to use (for all but MSE, NLL, Focal)')
 	parser.add_argument('--tau', type=float, default=AUTO_TAU_L, help='Value of tau to use (for SRRL, MSRRL)')
 	parser.add_argument('--losses', type=str, nargs='+', default=list(loss_funcs.LOSSES.keys()), help='List of losses to consider')
+	parser.add_argument('--gradcheck', action='store_true', help='Perform grad check on custom autograd modules')
 	parser.add_argument('--evalx', type=float, nargs='+', help='Evaluate case where raw logits are as listed (first is true class)')
 	parser.add_argument('--evalp', type=float, nargs='+', help='Evaluate case where probabilities are as listed (first is true class, rescaled to sum to 1)')
 	parser.add_argument('--plot', type=str, nargs='+', help='Situation(s) to provide plots for')
@@ -65,6 +66,9 @@ def main():
 
 	args = parser.parse_args()
 	args.device = torch.device(args.device)
+
+	if args.gradcheck:
+		gradcheck(args)
 
 	if args.evalx:
 		evalx(args.evalx, args)
@@ -132,6 +136,19 @@ def loss_common(x, eps, tau):
 	q[:, :1] -= 1 - eps
 	q[:, 1:] -= eps / (K - 1)
 	return LossCommon(K=K, eps=eps, tau=tau, eta=eta, x=x, z=z, p=p, q=q)
+
+#
+# Grad check
+#
+
+# Action: Perform grad check on custom autograd modules
+def gradcheck(args):
+	print("Performing grad checks")
+	print("Checking DualLogSoftmaxFunction...")
+	for dim in range(4):
+		assert torch.autograd.gradcheck(lambda x: loss_funcs.DualLogSoftmaxFunction.apply(x, dim), torch.normal(0.0, 3.0, (3, 4, 5, 6), requires_grad=True, dtype=torch.double, device=args.device), check_grad_dtypes=True, check_batched_grad=True)
+	print("Done")
+	print()
 
 #
 # Evaluate
