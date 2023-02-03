@@ -2,11 +2,9 @@
 # Test various classification losses and how to best implement them
 
 # Imports
-import sys
 import math
 import inspect
 import argparse
-import functools
 import itertools
 import dataclasses
 import matplotlib.pyplot as plt
@@ -58,7 +56,7 @@ def main():
 	parser.add_argument('--device', type=str, default='cuda', help='Device to perform calculations on')
 	parser.add_argument('--eps', type=float, default=DEFAULT_EPS, help='Value of epsilon to use (for all but MSE, NLL, Focal)')
 	parser.add_argument('--tau', type=float, default=AUTO_TAU_L, help='Value of tau to use (for SRRL, MSRRL)')
-	parser.add_argument('--losses', type=str, nargs='+', default=list(LOSS_MAP.keys()), help='List of losses to consider')
+	parser.add_argument('--losses', type=str, nargs='+', default=list(loss_funcs.LOSSES.keys()), help='List of losses to consider')
 	parser.add_argument('--evalx', type=float, nargs='+', help='Evaluate case where raw logits are as listed (first is true class)')
 	parser.add_argument('--evalp', type=float, nargs='+', help='Evaluate case where probabilities are as listed (first is true class, rescaled to sum to 1)')
 	parser.add_argument('--plot', type=str, nargs='+', help='Situation(s) to provide plots for')
@@ -81,23 +79,6 @@ def main():
 #
 # Losses
 #
-
-# Auto-populate loss map from loss_funcs module in the format dict[name_lower, tuple(name, loss_factory)]
-def generate_loss_map():
-	loss_map = {}
-	for cls_name, cls_obj in inspect.getmembers(sys.modules['loss_funcs']):
-		if inspect.isclass(cls_obj) and cls_obj is not loss_funcs.ClassificationLoss and issubclass(cls_obj, loss_funcs.ClassificationLoss):
-			loss_name = cls_name.removesuffix('Loss')
-			loss_params = inspect.signature(cls_obj).parameters.keys()
-			extra_params = []
-			if 'all_probs' in loss_params:
-				extra_params.append(('all_probs', (('', False), ('All', True))))
-			for extra_values in itertools.product(*(param[1] for param in extra_params)):
-				extra_loss_name = loss_name + ''.join(value[0] for value in extra_values)
-				extra_param_dict = dict(zip((param[0] for param in extra_params), (value[1] for value in extra_values)))
-				loss_map[extra_loss_name.lower()] = (extra_loss_name, functools.partial(cls_obj, **extra_param_dict) if extra_param_dict else cls_obj)
-	return loss_map
-LOSS_MAP = generate_loss_map()
 
 # Create a loss module from a loss factory that can be used as Callable[[logits_tensor, target_tensor], loss_tensor]
 def create_loss_module(loss_factory, M):
@@ -174,9 +155,10 @@ def evalx(x, args):
 			print_vec('dLdt', result.dLdt[0])
 			print()
 		# OLD STOP
-		loss_name, loss_factory = LOSS_MAP[loss_key.lower()]
+		loss_name, loss_factory = loss_funcs.LOSSES[loss_key.lower()]
 		print(f"EVALUATE: {loss_name}")
 		loss_module = create_loss_module(loss_factory, M)
+		print(f"LOSS MODULE: {loss_module}")
 		result = eval_loss_module_grad(loss_module, x, M)
 		print_vec('   x', result.x[0])
 		print_vec('   p', result.M.p[0])
@@ -201,7 +183,7 @@ def print_vec(name, vec, fmt='7.4f'):
 def plot_situation(situation, args):
 	sit_name, sit_desc, sit_var, sit_gen = SITUATION_MAP[situation.lower()]
 	print(f"SITUATION:   {sit_name}")
-	print(f"Description: {sit_desc}")
+	print(f"DESCRIPTION: {sit_desc}")
 	v, x = sit_gen(args)
 	generate_plots(v, x, sit_var, sit_name, args)
 	print()
@@ -240,8 +222,9 @@ def generate_plots(v, x, sit_var, sit_name, args):
 			for i, data in enumerate((result.L, result.dLdt)):
 				axsL[i].plot(v, data.detach().cpu().numpy(), label=loss_name)
 		# OLD STOP
-		loss_name, loss_factory = LOSS_MAP[loss_key.lower()]
+		loss_name, loss_factory = loss_funcs.LOSSES[loss_key.lower()]
 		loss_module = create_loss_module(loss_factory, M)
+		print(f"LOSS MODULE: {loss_module}")
 		result = eval_loss_module_grad(loss_module, x, M)
 		for i in range(3):
 			axsX[i].plot(v, result.dxdt[:, i].detach().cpu().numpy(), label=loss_name)
@@ -516,12 +499,12 @@ def mesrrl_cap_loss(x, eps):
 	return L, M
 
 # Loss map
-LOSS_MAP_OLD = dict(
+LOSS_MAP_OLD = dict(  # TODO: Transcribe the notes to loss_funcs.py classes
 	mse=('MSE', lambda x, eps, tau: mse_loss(x)),
 	nll=('NLL', lambda x, eps, tau: nll_loss(x)),
 	focal=('Focal', lambda x, eps, tau: focal_loss(x)),
 
-	kldiv=('KLDiv', lambda x, eps, tau: kldiv_loss(x, eps)),  # Note: Identical grads to SNLL
+	kldiv=('KLDiv', lambda x, eps, tau: kldiv_loss(x, eps)),
 	snll=('SNLL', lambda x, eps, tau: snll_loss(x, eps)),
 	dnll=('DNLL', lambda x, eps, tau: dnll_loss(x, eps, cap=False)),
 	dnllcap=('DNLLCap', lambda x, eps, tau: dnll_loss(x, eps, cap=True)),
