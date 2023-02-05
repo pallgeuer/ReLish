@@ -161,6 +161,25 @@ class RDNLLILoss(ClassificationLoss):
 			probs_true.clamp_(max=target_probs_true)
 		return self.reduce_loss(target_probs_true.sub(1).mul_(probs_true.neg().log1p_()).addcmul_(target_probs_true, probs_true.log_(), value=-1))
 
+# Relative dual negative log likelihood loss (2-norm)
+class RDNLL2Loss(ClassificationLoss):
+
+	def __init__(self, num_classes, normed=True, reduction='mean', eps=DEFAULT_EPS, cap=True, detach=True):
+		mu = 1 - eps - eps / math.sqrt(num_classes - 1)
+		norm_scale = math.sqrt((num_classes - 1) / num_classes) / ((1 - eps - 1 / num_classes) * (1 + 1 / math.sqrt(num_classes - 1)))
+		super().__init__(num_classes, normed, norm_scale, reduction, eps=eps, mu=mu, cap=cap, detach=detach)
+
+	def loss(self, logits, target):
+		target = target.unsqueeze(dim=1)
+		probs = F.softmax(logits, dim=1)
+		probs_true = probs.gather(dim=1, index=target)
+		probs_false = probs.detach() if self.detach else probs
+		probs_false = probs_false.scatter(dim=1, index=target, value=0)  # noqa
+		target_probs_true = torch.linalg.norm(probs_false, dim=1, keepdim=True).add(self.mu)
+		if self.cap:
+			probs_true.clamp_(max=target_probs_true)
+		return self.reduce_loss(target_probs_true.sub(1).mul_(probs_true.neg().log1p_()).addcmul_(target_probs_true, probs_true.log_(), value=-1))
+
 #
 # Loss maps
 #
@@ -177,6 +196,8 @@ def generate_loss_map() -> dict[str, tuple[str, Callable]]:
 				extra_params.append(('all_probs', (('', False), ('All', True))))
 			if 'cap' in loss_params:
 				extra_params.append(('cap', (('', False), ('Cap', True))))
+			if 'detach' in loss_params:
+				extra_params.append(('detach', (('', False), ('Detach', True))))
 			for extra_values in itertools.product(*(param[1] for param in extra_params)):
 				extra_loss_name = loss_name + ''.join(value[0] for value in extra_values)
 				extra_param_dict = dict(zip((param[0] for param in extra_params), (value[1] for value in extra_values)))
