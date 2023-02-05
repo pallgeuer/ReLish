@@ -516,7 +516,7 @@ def mesrrl_cap_loss(x, eps):
 	return L, M
 
 # Loss map
-LOSS_MAP_OLD = dict(  # TODO: Transcribe the notes to loss_funcs.py classes
+LOSS_MAP_OLD = dict(  # TODO: Verify that all these are perfectly reimplemented then delete all the OLD stuff! (search for '# OLD')
 	mse=('MSE', lambda x, eps, tau: mse_loss(x)),
 	nll=('NLL', lambda x, eps, tau: nll_loss(x)),
 	focal=('Focal', lambda x, eps, tau: focal_loss(x)),
@@ -539,11 +539,9 @@ LOSS_MAP_OLD = dict(  # TODO: Transcribe the notes to loss_funcs.py classes
 	mdnllcapgrad=('MDNLLCapGrad', lambda x, eps, tau: mdnll_loss(x, eps, cap=True, cgrad=True)),
 
 	rrl=('RRL', lambda x, eps, tau: rrl_loss(x, eps, cap=False)),
-	rrlcap=('RRLCap', lambda x, eps, tau: rrl_loss(x, eps, cap=True)),  # Note: Gradients are not continuous
 	mrrlcap=('MRRLCap', lambda x, eps, tau: mrrl_cap_loss(x, eps)),
 
 	srrl=('SRRL', lambda x, eps, tau: srrl_loss(x, eps, tau, cap=False)),
-	srrlcap=('SRRLCap', lambda x, eps, tau: srrl_loss(x, eps, tau, cap=True)),  # Note: Gradients are not continuous
 	msrrlcap=('MSRRLCap', lambda x, eps, tau: msrrl_cap_loss(x, eps, tau)),
 
 	mesrrlcap=('MESRRLCap', lambda x, eps, tau: mesrrl_cap_loss(x, eps)),

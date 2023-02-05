@@ -14,6 +14,7 @@ import torch.nn.functional as F
 
 # Constants
 DEFAULT_EPS = 0.1
+DEFAULT_TAU = 0.5
 
 #
 # Classification losses
@@ -22,12 +23,13 @@ DEFAULT_EPS = 0.1
 # Generic classification loss
 class ClassificationLoss(nn.Module):
 
-	def __init__(self, num_classes, normed, norm_scale, reduction, **kwargs):
+	def __init__(self, num_classes, normed, norm_scale, reduction, normed_inplace=True, **kwargs):
 		super().__init__()
 		self.num_classes = num_classes
 		self.normed = normed
 		self.norm_scale = norm_scale if self.normed else 1
 		self.reduction = reduction
+		self.normed_inplace = normed_inplace
 		self.kwargs = kwargs
 		for key, value in kwargs.items():
 			setattr(self, key, value)
@@ -42,7 +44,10 @@ class ClassificationLoss(nn.Module):
 	def forward(self, logits, target):
 		loss = self.loss(logits, target)
 		if self.normed:
-			loss.mul_(self.norm_scale)
+			if self.normed_inplace:
+				loss.mul_(self.norm_scale)
+			else:
+				loss = loss.mul(self.norm_scale)
 		return loss
 
 	def loss(self, logits, target):
@@ -65,12 +70,13 @@ class MSELoss(ClassificationLoss):
 		super().__init__(num_classes, normed, norm_scale, reduction, all_probs=all_probs)
 
 	def loss(self, logits, target):
+		target = target.unsqueeze(dim=1)
 		probs = F.softmax(logits, dim=1)
 		if self.all_probs:
-			probs = probs.scatter_add(dim=1, index=target.unsqueeze(dim=1), src=probs.new_full((probs.shape[0], 1, *probs.shape[2:]), -1))
+			probs = probs.scatter_add(dim=1, index=target, src=torch.full_like(target, fill_value=-1, dtype=probs.dtype))
 			return self.reduce_loss(probs.square_().sum(dim=1))
 		else:
-			probs_true = probs.gather(dim=1, index=target.unsqueeze(dim=1))
+			probs_true = probs.gather(dim=1, index=target)
 			return self.reduce_loss(probs_true.sub_(1).square_())
 
 # Negative log likelihood loss
@@ -201,6 +207,42 @@ class MDNLLLoss(ClassificationLoss):
 		if self.cap:
 			probs_true.clamp_(max=target_probs_true)
 		return self.reduce_loss(target_probs_true.sub(1).mul_(probs_true.neg().log1p_()).addcmul_(target_probs_true, probs_true.log_(), value=-1))
+
+# Relative raw logit loss
+class RRLLoss(ClassificationLoss):
+
+	def __init__(self, num_classes, normed=True, reduction='mean', eps=DEFAULT_EPS):
+		eta = math.log(1 - eps) - math.log(eps / (num_classes - 1))
+		norm_scale = math.sqrt(num_classes / (num_classes - 1)) / (2 * eta)
+		super().__init__(num_classes, normed, norm_scale, reduction, eps=eps, eta=eta)
+
+	def loss(self, logits, target):
+		target = target.unsqueeze(dim=1)
+		logit_terms = logits.scatter_add(dim=1, index=target, src=torch.full_like(target, fill_value=-self.eta, dtype=logits.dtype))
+		logit_terms_sumsq = logit_terms.sum(dim=1, keepdim=True).square_()
+		return self.reduce_loss(logit_terms.square_().sum(dim=1, keepdim=True).sub_(logit_terms_sumsq, alpha=1 / self.num_classes))
+
+# TODO: Manually capped relative raw logit loss => MRRLCapLoss
+
+# Saturated relative raw logit loss
+class SRRLLoss(ClassificationLoss):
+
+	def __init__(self, num_classes, normed=True, reduction='mean', eps=DEFAULT_EPS, tau=DEFAULT_TAU):
+		eta = math.log(1 - eps) - math.log(eps / (num_classes - 1))
+		delta = ((1 - tau) / tau) * ((num_classes - 1) / num_classes) * eta * eta
+		norm_scale = 1 / math.sqrt(tau)
+		super().__init__(num_classes, normed, norm_scale, reduction, normed_inplace=False, eps=eps, eta=eta, delta=delta)
+
+	def loss(self, logits, target):
+		target = target.unsqueeze(dim=1)
+		logit_terms = logits.scatter_add(dim=1, index=target, src=torch.full_like(target, fill_value=-self.eta, dtype=logits.dtype))
+		logit_terms_sumsq = logit_terms.sum(dim=1, keepdim=True).square_()
+		J = logit_terms.square_().sum(dim=1, keepdim=True).sub_(logit_terms_sumsq, alpha=1 / self.num_classes)
+		return self.reduce_loss(J.add_(self.delta).sqrt_())
+
+# TODO: Manually capped saturated relative raw logit loss => MSRRLCapLoss
+
+# TODO: Manually capped exponentially saturated raw logit loss => MESRRLCapLoss
 
 #
 # Loss maps
