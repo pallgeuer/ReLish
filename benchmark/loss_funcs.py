@@ -212,12 +212,12 @@ class DualLogSoftmaxFunction(torch.autograd.Function):
 			return None, None
 		neg_softmax, = ctx.saved_tensors
 		if grad_logsoft is not None:
-			grad_inp_logsoft = grad_logsoft.sum(dim=ctx.dim, keepdim=True).mul(neg_softmax).add_(grad_logsoft)
+			grad_inp_logsoft = grad_logsoft.addcmul(grad_logsoft.sum(dim=ctx.dim, keepdim=True), neg_softmax)
 		else:
 			grad_inp_logsoft = None
 		if grad_logcompsoft is not None:
 			grad_scaled = grad_logcompsoft.mul(neg_softmax).div_(neg_softmax.add(1))
-			grad_inp_logcompsoft = grad_scaled.sum(dim=ctx.dim, keepdim=True).mul(neg_softmax).add_(grad_scaled)
+			grad_inp_logcompsoft = grad_scaled.addcmul_(grad_scaled.sum(dim=ctx.dim, keepdim=True), neg_softmax)
 		else:
 			grad_inp_logcompsoft = None
 		if grad_inp_logsoft is not None and grad_inp_logcompsoft is not None:
