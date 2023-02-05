@@ -143,6 +143,24 @@ class DNLLLoss(ClassificationLoss):
 		item_loss = log_probs.add_(log_probs_comp.sub_(log_probs), alpha=self.eps)
 		return F.nll_loss(item_loss, target, reduction=self.reduction)
 
+# Relative dual negative log likelihood loss (Inf-norm)
+class RDNLLILoss(ClassificationLoss):
+
+	def __init__(self, num_classes, normed=True, reduction='mean', eps=DEFAULT_EPS, cap=True):
+		mu = 1 - eps - eps / (num_classes - 1)
+		norm_scale = math.sqrt((num_classes - 1) / num_classes) / mu
+		super().__init__(num_classes, normed, norm_scale, reduction, eps=eps, mu=mu, cap=cap)
+
+	def loss(self, logits, target):
+		target = target.unsqueeze(dim=1)
+		probs = F.softmax(logits, dim=1)
+		probs_true = probs.gather(dim=1, index=target)
+		probs_false = probs.detach().scatter(dim=1, index=target, value=0)
+		target_probs_true = torch.amax(probs_false, dim=1, keepdim=True).add_(self.mu)
+		if self.cap:
+			probs_true.clamp_(max=target_probs_true)
+		return self.reduce_loss(target_probs_true.sub(1).mul_(probs_true.neg().log1p_()).addcmul_(target_probs_true, probs_true.log_(), value=-1))
+
 #
 # Loss maps
 #
