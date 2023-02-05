@@ -528,15 +528,15 @@ LOSS_MAP_OLD = dict(  # TODO: Transcribe the notes to loss_funcs.py classes
 
 	rdnlli=('RDNLLI', lambda x, eps, tau: rdnlli_loss(x, eps, cap=False)),
 	rdnllicap=('RDNLLICap', lambda x, eps, tau: rdnlli_loss(x, eps, cap=True)),
-	rdnll2detach=('RDNLL2Detach', lambda x, eps, tau: rdnll2_loss(x, eps, cap=False, cgrad=False)),
-	rdnll2capdetach=('RDNLL2CapDetach', lambda x, eps, tau: rdnll2_loss(x, eps, cap=True, cgrad=False)),
-	rdnll2=('RDNLL2', lambda x, eps, tau: rdnll2_loss(x, eps, cap=False, cgrad=True)),  # Note: No loss scaling relative to non-grad, zero grad is not exactly where required
-	rdnll2cap=('RDNLL2Cap', lambda x, eps, tau: rdnll2_loss(x, eps, cap=True, cgrad=True)),  # Note: No loss scaling relative to non-grad, zero grad is not exactly where required, some uncapped return gradients occur
+	rdnll2=('RDNLL2', lambda x, eps, tau: rdnll2_loss(x, eps, cap=False, cgrad=False)),
+	rdnll2cap=('RDNLL2Cap', lambda x, eps, tau: rdnll2_loss(x, eps, cap=True, cgrad=False)),
+	rdnll2grad=('RDNLL2Grad', lambda x, eps, tau: rdnll2_loss(x, eps, cap=False, cgrad=True)),
+	rdnll2capgrad=('RDNLL2CapGrad', lambda x, eps, tau: rdnll2_loss(x, eps, cap=True, cgrad=True)),
 
-	mdnll=('MDNLL', lambda x, eps, tau: mdnll_loss(x, eps, cap=False, cgrad=False)),  # Note: Identical grads to DNLL
-	mdnllcap=('MDNLLCap', lambda x, eps, tau: mdnll_loss(x, eps, cap=True, cgrad=False)),  # Note: Identical grads to DNLLCap
-	mdnllgrad=('MDNLLGrad', lambda x, eps, tau: mdnll_loss(x, eps, cap=False, cgrad=True)),  # Note: No loss scaling relative to non-grad, zero grad is not exactly where required
-	mdnllcapgrad=('MDNLLCapGrad', lambda x, eps, tau: mdnll_loss(x, eps, cap=True, cgrad=True)),  # Note: No loss scaling relative to non-grad, zero grad is not exactly where required, some uncapped return gradients occur
+	mdnll=('MDNLL', lambda x, eps, tau: mdnll_loss(x, eps, cap=False, cgrad=False)),
+	mdnllcap=('MDNLLCap', lambda x, eps, tau: mdnll_loss(x, eps, cap=True, cgrad=False)),
+	mdnllgrad=('MDNLLGrad', lambda x, eps, tau: mdnll_loss(x, eps, cap=False, cgrad=True)),
+	mdnllcapgrad=('MDNLLCapGrad', lambda x, eps, tau: mdnll_loss(x, eps, cap=True, cgrad=True)),
 
 	rrl=('RRL', lambda x, eps, tau: rrl_loss(x, eps, cap=False)),
 	rrlcap=('RRLCap', lambda x, eps, tau: rrl_loss(x, eps, cap=True)),  # Note: Gradients are not continuous

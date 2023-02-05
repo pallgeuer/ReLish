@@ -162,6 +162,8 @@ class RDNLLILoss(ClassificationLoss):
 		return self.reduce_loss(target_probs_true.sub(1).mul_(probs_true.neg().log1p_()).addcmul_(target_probs_true, probs_true.log_(), value=-1))
 
 # Relative dual negative log likelihood loss (2-norm)
+# Note: If detach is False, there is no loss scaling relative to non-grad, and zero grad is not actually exactly where desired.
+# Note: If cap is also True, then some uncapped return gradients actually occur due to the gradient leak via the coefficients.
 class RDNLL2Loss(ClassificationLoss):
 
 	def __init__(self, num_classes, normed=True, reduction='mean', eps=DEFAULT_EPS, cap=True, detach=True):
@@ -176,6 +178,26 @@ class RDNLL2Loss(ClassificationLoss):
 		probs_false = probs.detach() if self.detach else probs
 		probs_false = probs_false.scatter(dim=1, index=target, value=0)  # noqa
 		target_probs_true = torch.linalg.norm(probs_false, dim=1, keepdim=True).add(self.mu)
+		if self.cap:
+			probs_true.clamp_(max=target_probs_true)
+		return self.reduce_loss(target_probs_true.sub(1).mul_(probs_true.neg().log1p_()).addcmul_(target_probs_true, probs_true.log_(), value=-1))
+
+# Max-logit dual negative log likelihood loss
+# Note: If detach is True, has identical gradients to DNLLLoss
+# Note: If detach is False, there is no loss scaling relative to non-grad, and zero grad is not actually exactly where desired.
+# Note: If cap is also True, then some uncapped return gradients actually occur due to the gradient leak via the coefficients.
+class MDNLLLoss(ClassificationLoss):
+
+	def __init__(self, num_classes, normed=True, reduction='mean', eps=DEFAULT_EPS, cap=True, detach=True):
+		norm_scale = 0.5 * math.sqrt((num_classes - 1) / num_classes) / (1 - eps - 1 / num_classes)
+		super().__init__(num_classes, normed, norm_scale, reduction, eps=eps, cap=cap, detach=detach)
+		self.target_const = 2 * (1 - self.eps)
+
+	def loss(self, logits, target):
+		probs = F.softmax(logits, dim=1)
+		probs_true = probs.gather(dim=1, index=target.unsqueeze(dim=1))
+		target_probs_true = probs_true.detach() if self.detach else probs_true
+		target_probs_true = self.target_const - target_probs_true
 		if self.cap:
 			probs_true.clamp_(max=target_probs_true)
 		return self.reduce_loss(target_probs_true.sub(1).mul_(probs_true.neg().log1p_()).addcmul_(target_probs_true, probs_true.log_(), value=-1))
@@ -197,7 +219,7 @@ def generate_loss_map() -> dict[str, tuple[str, Callable]]:
 			if 'cap' in loss_params:
 				extra_params.append(('cap', (('', False), ('Cap', True))))
 			if 'detach' in loss_params:
-				extra_params.append(('detach', (('', False), ('Detach', True))))
+				extra_params.append(('detach', (('Grad', False), ('', True))))
 			for extra_values in itertools.product(*(param[1] for param in extra_params)):
 				extra_loss_name = loss_name + ''.join(value[0] for value in extra_values)
 				extra_param_dict = dict(zip((param[0] for param in extra_params), (value[1] for value in extra_values)))
