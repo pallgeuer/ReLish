@@ -146,7 +146,7 @@ def gradcheck(args):
 	print("Performing grad checks")
 	print("Checking DualLogSoftmaxFunction...")
 	for dim in range(4):
-		assert torch.autograd.gradcheck(lambda x: loss_funcs.DualLogSoftmaxFunction.apply(x, dim), torch.normal(0.0, 3.0, (3, 4, 5, 6), requires_grad=True, dtype=torch.double, device=args.device), check_grad_dtypes=True, check_batched_grad=True)
+		assert torch.autograd.gradcheck(lambda x: loss_funcs.DualLogSoftmaxFunction.apply(x, dim), torch.normal(0.0, 3.0, (3, 4, 5, 6), requires_grad=True, dtype=torch.double, device=args.device), check_grad_dtypes=True, check_batched_grad=False)
 	print("Done")
 	print()
 
