@@ -261,7 +261,17 @@ class MSRRLCapLoss(ClassificationLoss):
 	def loss(self, logits, target):
 		return self.reduce_loss(MSRRLCapFunction.apply(logits, target, self.num_classes, self.norm_scale, self.eta, self.delta))
 
-# TODO: Manually capped exponentially saturated raw logit loss => MESRRLCapLoss
+# Manually capped exponentially saturated relative raw logit loss
+class MESRRLCapLoss(ClassificationLoss):
+
+	def __init__(self, num_classes, normed=True, reduction='mean', eps=DEFAULT_EPS):
+		eta = math.log(1 - eps) - math.log(eps / (num_classes - 1))
+		norm_scale = (1 - eps) / ((num_classes - 1) / num_classes - eps)
+		beta = (num_classes / (num_classes - 1)) / (norm_scale * eta) ** 2
+		super().__init__(num_classes, normed, norm_scale, reduction, eps=eps, eta=eta, beta=beta)
+
+	def loss(self, logits, target):
+		return self.reduce_loss(MESRRLCapFunction.apply(logits, target, self.num_classes, self.norm_scale, self.eta, self.beta))
 
 #
 # Loss maps
@@ -374,6 +384,26 @@ class MSRRLCapFunction(torch.autograd.Function):
 		logit_terms_sumsq = logit_terms.sum(dim=1, keepdim=True).square_()
 		J = logit_terms.square().sum(dim=1, keepdim=True).sub_(logit_terms_sumsq, alpha=1 / num_classes)
 		grad = logit_terms.div_(J.add_(delta).sqrt_()).sub_(logit_terms.mean(dim=1, keepdim=True))
+		ctx.save_for_backward(grad)
+		return grad.square().sum(dim=1, keepdim=True).mul_(norm_scale)
+
+	@staticmethod
+	@torch.autograd.function.once_differentiable
+	def backward(ctx, grad_loss):
+		return (grad_loss.mul(ctx.saved_tensors[0]) if grad_loss is not None and ctx.needs_input_grad[0] else None), None, None, None, None, None
+
+# Manually capped exponentially saturated relative raw logit loss autograd function
+# noinspection PyMethodOverriding, PyAbstractClass
+class MESRRLCapFunction(torch.autograd.Function):
+
+	@staticmethod
+	def forward(ctx, logits, target, num_classes, norm_scale, eta, beta):
+		ctx.set_materialize_grads(False)
+		target = target.unsqueeze(dim=1)
+		logit_terms = logits.sub(logits.gather(dim=1, index=target)).scatter_(dim=1, index=target, value=-eta).clamp_(min=-eta)
+		logit_terms_sumsq = logit_terms.sum(dim=1, keepdim=True).square_()
+		J = logit_terms.square().sum(dim=1, keepdim=True).sub_(logit_terms_sumsq, alpha=1 / num_classes)
+		grad = logit_terms.mul_(J.mul(beta).tanh_().div_(J).sqrt_()).sub_(logit_terms.mean(dim=1, keepdim=True))
 		ctx.save_for_backward(grad)
 		return grad.square().sum(dim=1, keepdim=True).mul_(norm_scale)
 
