@@ -27,9 +27,6 @@ FIGSIZE = (9.6, 5.15)
 class LossCommon:
 	K: int
 	eps: float
-	tau: float
-	eta: float
-	x: torch.Tensor
 	z: torch.Tensor
 	p: torch.Tensor
 	q: torch.Tensor
@@ -108,19 +105,15 @@ def eval_loss_module_grad(loss_module, x, M):
 	return LossResult(M=M, x=x, L=L, dxdt=dxdt, dzdt=dzdt, dLdt=dLdt)
 
 # Calculate common loss terms
-def loss_common(x, eps, tau):
+def loss_common(x, eps):
 	K = x.shape[1]
 	eta = math.log(1 - eps) - math.log(eps / (K - 1))
-	# if tau == AUTO_TAU_L:
-	# 	tau = 1 - ((K - 1) / (K * K)) * eta / (1 - eps - 1 / K)
-	# elif tau == AUTO_TAU_H:
-	# 	tau = (1 - 1 / (K * (1 - eps))) ** 2
 	z = x[:, 1:] - x[:, :1] + eta
 	p = F.softmax(x, dim=1)
 	q = p.clone()
 	q[:, :1] -= 1 - eps
 	q[:, 1:] -= eps / (K - 1)
-	return LossCommon(K=K, eps=eps, tau=tau, eta=eta, x=x, z=z, p=p, q=q)
+	return LossCommon(K=K, eps=eps, z=z, p=p, q=q)
 
 #
 # Grad check
@@ -142,7 +135,7 @@ def gradcheck(args):
 # Action: Evaluate losses on a list of logits
 def evalx(x, args):
 	x = torch.tensor([x], device=args.device)
-	M = loss_common(x, args.eps, args.tau)
+	M = loss_common(x, args.eps)
 	for loss_key in args.losses:
 		loss_name, loss_factory = loss_funcs.LOSSES[loss_key.lower()]
 		print(f"EVALUATE: {loss_name}")
@@ -180,7 +173,7 @@ def plot_situation(situation, args):
 # Generate the plots for a situation
 def generate_plots(v, x, sit_var, sit_name, args):
 
-	M = loss_common(x, args.eps, args.tau)
+	M = loss_common(x, args.eps)
 
 	fig, axs = plt.subplots(2, 2, figsize=FIGSIZE)
 	fig.suptitle(f"{sit_name}: Logits and probabilities vs {sit_var}")
