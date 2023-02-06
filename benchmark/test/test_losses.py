@@ -92,15 +92,32 @@ def eval_loss_module(loss_module, x):
 
 # Evaluate a loss module and its gradients on a logits tensor
 def eval_loss_module_grad(loss_module, x, M):
+
 	x = x.detach().requires_grad_()
 	L = eval_loss_module(loss_module, x)
 	x.grad = None
 	L.sum().backward()
-	# noinspection PyTypeChecker
-	dLdx: torch.Tensor = x.grad
+	dLdx: torch.Tensor = x.grad  # noqa
 	dxdt = -dLdx
 	dzdt = dxdt[:, 1:] - dxdt[:, :1]
 	dLdt = -dLdx.square().sum(dim=1, keepdim=True)
+
+	loss_module.reduction = 'sum'
+	xx = x.detach().requires_grad_()
+	LL = eval_loss_module(loss_module, xx)
+	xx.grad = None
+	LL.backward()
+	assert torch.allclose(x.grad, xx.grad)  # noqa
+
+	loss_module.reduction = 'mean'
+	xx = x.detach().requires_grad_()
+	LL = eval_loss_module(loss_module, xx)
+	xx.grad = None
+	LL.mul(x.shape[0]).backward()
+	assert torch.allclose(x.grad, xx.grad, atol=1e-5, rtol=1e-5)  # noqa
+
+	loss_module.reduction = 'none'
+
 	return LossResult(M=M, x=x, L=L, dxdt=dxdt, dzdt=dzdt, dLdt=dLdt)
 
 # Calculate common loss terms
