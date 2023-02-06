@@ -15,8 +15,7 @@ import loss_funcs  # noqa
 
 # Constants
 DEFAULT_EPS = 0.20
-AUTO_TAU_L = -2
-AUTO_TAU_H = -1
+DEFAULT_TAU = loss_funcs.DEFAULT_TAU
 FIGSIZE = (9.6, 5.15)
 
 #
@@ -55,7 +54,7 @@ def main():
 	parser = argparse.ArgumentParser()
 	parser.add_argument('--device', type=str, default='cuda', help='Device to perform calculations on')
 	parser.add_argument('--eps', type=float, default=DEFAULT_EPS, help='Value of epsilon to use (for all but MSE, NLL, Focal)')
-	parser.add_argument('--tau', type=float, default=AUTO_TAU_L, help='Value of tau to use (for SRRL, MSRRL)')
+	parser.add_argument('--tau', type=float, default=DEFAULT_TAU, help='Value of tau to use (for SRRL, MSRRL)')
 	parser.add_argument('--losses', type=str, nargs='+', default=list(loss_funcs.LOSSES.keys()), help='List of losses to consider')
 	parser.add_argument('--gradcheck', action='store_true', help='Perform grad check on custom autograd modules')
 	parser.add_argument('--evalx', type=float, nargs='+', help='Evaluate case where raw logits are as listed (first is true class)')
@@ -86,7 +85,7 @@ def main():
 
 # Create a loss module from a loss factory that can be used as Callable[[logits_tensor, target_tensor], loss_tensor]
 def create_loss_module(loss_factory, M):
-	params = dict(num_classes=M.K, normed=True, reduction='none', eps=M.eps, tau=M.tau)
+	params = dict(num_classes=M.K, normed=True, reduction='none', eps=M.eps)
 	factory_param_keys = inspect.signature(loss_factory).parameters.keys()
 	params = {key: value for key, value in params.items() if key in factory_param_keys}
 	return loss_factory(**params)
@@ -126,10 +125,10 @@ def eval_loss_module_grad(loss_module, x, M):
 def loss_common(x, eps, tau):
 	K = x.shape[1]
 	eta = math.log(1 - eps) - math.log(eps / (K - 1))
-	if tau == AUTO_TAU_L:
-		tau = 1 - ((K - 1) / (K * K)) * eta / (1 - eps - 1 / K)
-	elif tau == AUTO_TAU_H:
-		tau = (1 - 1 / (K * (1 - eps))) ** 2
+	# if tau == AUTO_TAU_L:
+	# 	tau = 1 - ((K - 1) / (K * K)) * eta / (1 - eps - 1 / K)
+	# elif tau == AUTO_TAU_H:
+	# 	tau = (1 - 1 / (K * (1 - eps))) ** 2
 	z = x[:, 1:] - x[:, :1] + eta
 	p = F.softmax(x, dim=1)
 	q = p.clone()
@@ -307,42 +306,42 @@ SITUATION_MAP = dict(
 
 # Mean-squared error loss (Brier loss)
 def mse_loss(x):
-	M = loss_common(x, DEFAULT_EPS, AUTO_TAU_L)
+	M = loss_common(x, DEFAULT_EPS, loss_funcs.AUTO_TAU_L)
 	C = math.sqrt(M.K / (M.K - 1)) * (27 / 8)
 	L = C * (1 - M.p[:, :1]).square()
 	return L, M
 
 # Negative log likelihood loss
 def nll_loss(x):
-	M = loss_common(x, DEFAULT_EPS, AUTO_TAU_L)
+	M = loss_common(x, DEFAULT_EPS, loss_funcs.AUTO_TAU_L)
 	C = math.sqrt(M.K / (M.K - 1))
 	L = -C * torch.log(M.p[:, :1])
 	return L, M
 
 # Focal loss
 def focal_loss(x):
-	M = loss_common(x, DEFAULT_EPS, AUTO_TAU_L)
+	M = loss_common(x, DEFAULT_EPS, loss_funcs.AUTO_TAU_L)
 	C = math.sqrt(M.K / (M.K - 1)) * (M.K ** 2) / ((M.K - 1) * (M.K - 1 + 2 * math.log(M.K)))
 	L = -C * (1 - M.p[:, :1]).square() * torch.log(M.p[:, :1])  # Note: gamma = 2
 	return L, M
 
 # Kullback-Leibler divergence loss
 def kldiv_loss(x, eps):
-	M = loss_common(x, eps, AUTO_TAU_L)
+	M = loss_common(x, eps, loss_funcs.AUTO_TAU_L)
 	C = math.sqrt((M.K - 1) / M.K) / (1 - eps - 1 / M.K)
 	L = C * ((1 - eps) * (math.log(1 - eps) - torch.log(M.p[:, :1])) + (eps / (M.K - 1)) * torch.sum(math.log(eps / (M.K - 1)) - torch.log(M.p[:, 1:]), dim=1, keepdim=True))
 	return L, M
 
 # Label-smoothed negative log likelihood loss
 def snll_loss(x, eps):
-	M = loss_common(x, eps, AUTO_TAU_L)
+	M = loss_common(x, eps, loss_funcs.AUTO_TAU_L)
 	C = math.sqrt((M.K - 1) / M.K) / (1 - eps - 1 / M.K)
 	L = -C * ((1 - eps) * torch.log(M.p[:, :1]) + (eps / (M.K - 1)) * torch.sum(torch.log(M.p[:, 1:]), dim=1, keepdim=True))
 	return L, M
 
 # Dual negative log likelihood loss
 def dnll_loss(x, eps, cap):
-	M = loss_common(x, eps, AUTO_TAU_L)
+	M = loss_common(x, eps, loss_funcs.AUTO_TAU_L)
 	C = math.sqrt((M.K - 1) / M.K) / (1 - eps - 1 / M.K)
 	pT = M.p[:, :1]
 	if cap:
@@ -352,7 +351,7 @@ def dnll_loss(x, eps, cap):
 
 # Relative dual negative log likelihood loss (Inf-norm)
 def rdnlli_loss(x, eps, cap):
-	M = loss_common(x, eps, AUTO_TAU_L)
+	M = loss_common(x, eps, loss_funcs.AUTO_TAU_L)
 	mu = 1 - eps - eps / (M.K - 1)
 	C = math.sqrt((M.K - 1) / M.K) / mu
 	targetpT = torch.amax(M.p[:, 1:].detach(), dim=1, keepdim=True) + mu
@@ -364,7 +363,7 @@ def rdnlli_loss(x, eps, cap):
 
 # Relative dual negative log likelihood loss (2-norm)
 def rdnll2_loss(x, eps, cap, cgrad):
-	M = loss_common(x, eps, AUTO_TAU_L)
+	M = loss_common(x, eps, loss_funcs.AUTO_TAU_L)
 	mu = 1 - eps - eps / math.sqrt(M.K - 1)
 	C = math.sqrt((M.K - 1) / M.K) / ((1 - eps - 1 / M.K) * (1 + 1 / math.sqrt(M.K - 1)))
 	pF = M.p[:, 1:]
@@ -379,7 +378,7 @@ def rdnll2_loss(x, eps, cap, cgrad):
 
 # Max-logit dual negative log likelihood loss
 def mdnll_loss(x, eps, cap, cgrad):
-	M = loss_common(x, eps, AUTO_TAU_L)
+	M = loss_common(x, eps, loss_funcs.AUTO_TAU_L)
 	C = 0.5 * math.sqrt((M.K - 1) / M.K) / (1 - eps - 1 / M.K)
 	pTD = M.p[:, :1]
 	if not cgrad:
@@ -393,7 +392,7 @@ def mdnll_loss(x, eps, cap, cgrad):
 
 # Relative raw logit loss
 def rrl_loss(x, eps, cap):
-	M = loss_common(x, eps, AUTO_TAU_L)
+	M = loss_common(x, eps, loss_funcs.AUTO_TAU_L)
 	z = x - x[:, :1]
 	z[:, 1:] += M.eta
 	if cap:
@@ -430,7 +429,7 @@ class MRRLCapFunction(torch.autograd.Function):
 
 # Manually capped relative raw logit loss
 def mrrl_cap_loss(x, eps):
-	M = loss_common(x, eps, AUTO_TAU_L)
+	M = loss_common(x, eps, loss_funcs.AUTO_TAU_L)
 	L = MRRLCapFunction.apply(x, M)
 	return L, M
 
@@ -511,7 +510,7 @@ class MESRRLCapFunction(torch.autograd.Function):
 
 # Manually capped exponentially saturated relative raw logit loss
 def mesrrl_cap_loss(x, eps):
-	M = loss_common(x, eps, AUTO_TAU_L)
+	M = loss_common(x, eps, loss_funcs.AUTO_TAU_L)
 	L = MESRRLCapFunction.apply(x, M)
 	return L, M
 

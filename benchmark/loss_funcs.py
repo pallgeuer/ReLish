@@ -14,7 +14,10 @@ import torch.nn.functional as F
 
 # Constants
 DEFAULT_EPS = 0.1
-DEFAULT_TAU = 0.5
+AUTO_TAU_L = -3
+AUTO_TAU_M = -2
+AUTO_TAU_H = -1
+DEFAULT_TAU = AUTO_TAU_L
 
 #
 # Classification losses
@@ -238,6 +241,7 @@ class SRRLLoss(ClassificationLoss):
 
 	def __init__(self, num_classes, normed=True, reduction='mean', eps=DEFAULT_EPS, tau=DEFAULT_TAU):
 		eta = math.log(1 - eps) - math.log(eps / (num_classes - 1))
+		tau = resolve_tau(tau, num_classes, eps, eta)
 		delta = ((1 - tau) / tau) * ((num_classes - 1) / num_classes) * eta * eta
 		norm_scale = 1 / math.sqrt(tau)
 		super().__init__(num_classes, normed, norm_scale, reduction, normed_inplace=False, eps=eps, tau=tau, eta=eta, delta=delta)
@@ -254,6 +258,7 @@ class MSRRLCapLoss(ClassificationLoss):
 
 	def __init__(self, num_classes, normed=True, reduction='mean', eps=DEFAULT_EPS, tau=DEFAULT_TAU):
 		eta = math.log(1 - eps) - math.log(eps / (num_classes - 1))
+		tau = resolve_tau(tau, num_classes, eps, eta)
 		delta = ((1 - tau) / tau) * ((num_classes - 1) / num_classes) * eta * eta
 		norm_scale = 1 / math.sqrt(tau)
 		super().__init__(num_classes, normed, norm_scale, reduction, eps=eps, tau=tau, eta=eta, delta=delta)
@@ -287,6 +292,8 @@ def generate_loss_map() -> dict[str, tuple[str, Callable]]:
 			extra_params = []
 			if 'all_probs' in loss_params:
 				extra_params.append(('all_probs', (('', False), ('All', True))))
+			if 'tau' in loss_params:
+				extra_params.append(('tau', (('L', AUTO_TAU_L), ('M', AUTO_TAU_M), ('H', AUTO_TAU_H))))
 			if 'cap' in loss_params:
 				extra_params.append(('cap', (('', False), ('Cap', True))))
 			if 'detach' in loss_params:
@@ -353,6 +360,20 @@ def dual_log_softmax(inp: torch.Tensor, dim: Optional[int] = None) -> tuple[torc
 def _get_softmax_dim(name: str, ndim: int) -> int:
 	warnings.warn(f"Implicit dimension choice for {name} has been deprecated. Change the call to include dim=X as an argument.")
 	return 0 if ndim == 0 or ndim == 1 or ndim == 3 else 1
+
+# Resolve a tau value
+def resolve_tau(tau, num_classes, eps, eta):
+	tauL = 1 - ((num_classes - 1) / (num_classes * num_classes)) * eta / (1 - eps - 1 / num_classes)
+	tauH = (1 - 1 / (num_classes * (1 - eps))) ** 2
+	if tau == AUTO_TAU_L:
+		tau = tauL
+	elif tau == AUTO_TAU_M:
+		tau = 2 / (1 / tauL + 1 / tauH)
+	elif tau == AUTO_TAU_H:
+		tau = tauH
+	if not 0 < tau < 1:
+		raise ValueError(f"Invalid tau value: {tau}")
+	return tau
 
 # Manually capped relative raw logit loss autograd function
 # noinspection PyMethodOverriding, PyAbstractClass
