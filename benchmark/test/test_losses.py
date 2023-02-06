@@ -14,7 +14,7 @@ import torch.nn.functional as F
 import loss_funcs  # noqa
 
 # Constants
-DEFAULT_EPS = 0.20
+DEFAULT_EPS = 0.2
 DEFAULT_TAU = loss_funcs.DEFAULT_TAU
 FIGSIZE = (9.6, 5.15)
 
@@ -94,20 +94,6 @@ def create_loss_module(loss_factory, M):
 def eval_loss_module(loss_module, x):
 	return loss_module(x, torch.zeros(size=(x.shape[0], *x.shape[2:]), dtype=torch.long, device=x.device))
 
-# OLD START
-def eval_loss_old(x, loss, M):
-	x = x.detach().requires_grad_()
-	L, M = loss(x, M.eps, M.tau)
-	x.grad = None
-	L.sum().backward()
-	# noinspection PyTypeChecker
-	dLdx: torch.Tensor = x.grad
-	dxdt = -dLdx
-	dzdt = dxdt[:, 1:] - dxdt[:, :1]
-	dLdt = -dLdx.square().sum(dim=1, keepdim=True)
-	return LossResult(M=M, x=x, L=L, dxdt=dxdt, dzdt=dzdt, dLdt=dLdt)
-# OLD STOP
-
 # Evaluate a loss module and its gradients on a logits tensor
 def eval_loss_module_grad(loss_module, x, M):
 	x = x.detach().requires_grad_()
@@ -158,19 +144,6 @@ def evalx(x, args):
 	x = torch.tensor([x], device=args.device)
 	M = loss_common(x, args.eps, args.tau)
 	for loss_key in args.losses:
-		# OLD START
-		if loss_key.lower() in LOSS_MAP_OLD:
-			loss_name, loss = LOSS_MAP_OLD[loss_key.lower()]
-			print(f"EVALUATE: {loss_name}")
-			result = eval_loss_old(x, loss, M)
-			print_vec('   x', result.x[0])
-			print_vec('   p', result.M.p[0])
-			print_vec('   L', result.L[0])
-			print_vec('dxdt', result.dxdt[0])
-			print_vec('dzdt', result.dzdt[0])
-			print_vec('dLdt', result.dLdt[0])
-			print()
-		# OLD STOP
 		loss_name, loss_factory = loss_funcs.LOSSES[loss_key.lower()]
 		print(f"EVALUATE: {loss_name}")
 		loss_module = create_loss_module(loss_factory, M)
@@ -227,17 +200,6 @@ def generate_plots(v, x, sit_var, sit_name, args):
 	figZ.suptitle(f"{sit_name}: Relative logit update rate vs {sit_var}")
 	figL.suptitle(f"{sit_name}: Loss value and rate vs {sit_var}")
 	for loss_key in args.losses:
-		# OLD START
-		if loss_key.lower() in LOSS_MAP_OLD:
-			loss_name, loss = LOSS_MAP_OLD[loss_key.lower()]
-			result = eval_loss_old(x, loss, M)
-			for i in range(3):
-				axsX[i].plot(v, result.dxdt[:, i].detach().cpu().numpy(), label=loss_name)
-			for i in range(2):
-				axsZ[i].plot(v, result.dzdt[:, i].detach().cpu().numpy(), label=loss_name)
-			for i, data in enumerate((result.L, result.dLdt)):
-				axsL[i].plot(v, data.detach().cpu().numpy(), label=loss_name)
-		# OLD STOP
 		loss_name, loss_factory = loss_funcs.LOSSES[loss_key.lower()]
 		loss_module = create_loss_module(loss_factory, M)
 		print(f"LOSS MODULE: {loss_module}")
@@ -299,253 +261,6 @@ SITUATION_MAP = dict(
 	split_med=('Medium split', 'pT = 0.9*(1-eps) and the rest is divided amongst pF and equal pK', 'xd = xF - xK', lambda args: gen_split(args, 0.9 * (1 - args.eps))),
 	split_low=('Low split', 'pT = 1/K and the rest is divided amongst pF and equal pK', 'xd = xF - xK', lambda args: gen_split(args, 1 / args.plot_classes)),
 )
-
-#
-# OLD START
-#
-
-# Mean-squared error loss (Brier loss)
-def mse_loss(x):
-	M = loss_common(x, DEFAULT_EPS, loss_funcs.AUTO_TAU_L)
-	C = math.sqrt(M.K / (M.K - 1)) * (27 / 8)
-	L = C * (1 - M.p[:, :1]).square()
-	return L, M
-
-# Negative log likelihood loss
-def nll_loss(x):
-	M = loss_common(x, DEFAULT_EPS, loss_funcs.AUTO_TAU_L)
-	C = math.sqrt(M.K / (M.K - 1))
-	L = -C * torch.log(M.p[:, :1])
-	return L, M
-
-# Focal loss
-def focal_loss(x):
-	M = loss_common(x, DEFAULT_EPS, loss_funcs.AUTO_TAU_L)
-	C = math.sqrt(M.K / (M.K - 1)) * (M.K ** 2) / ((M.K - 1) * (M.K - 1 + 2 * math.log(M.K)))
-	L = -C * (1 - M.p[:, :1]).square() * torch.log(M.p[:, :1])  # Note: gamma = 2
-	return L, M
-
-# Kullback-Leibler divergence loss
-def kldiv_loss(x, eps):
-	M = loss_common(x, eps, loss_funcs.AUTO_TAU_L)
-	C = math.sqrt((M.K - 1) / M.K) / (1 - eps - 1 / M.K)
-	L = C * ((1 - eps) * (math.log(1 - eps) - torch.log(M.p[:, :1])) + (eps / (M.K - 1)) * torch.sum(math.log(eps / (M.K - 1)) - torch.log(M.p[:, 1:]), dim=1, keepdim=True))
-	return L, M
-
-# Label-smoothed negative log likelihood loss
-def snll_loss(x, eps):
-	M = loss_common(x, eps, loss_funcs.AUTO_TAU_L)
-	C = math.sqrt((M.K - 1) / M.K) / (1 - eps - 1 / M.K)
-	L = -C * ((1 - eps) * torch.log(M.p[:, :1]) + (eps / (M.K - 1)) * torch.sum(torch.log(M.p[:, 1:]), dim=1, keepdim=True))
-	return L, M
-
-# Dual negative log likelihood loss
-def dnll_loss(x, eps, cap):
-	M = loss_common(x, eps, loss_funcs.AUTO_TAU_L)
-	C = math.sqrt((M.K - 1) / M.K) / (1 - eps - 1 / M.K)
-	pT = M.p[:, :1]
-	if cap:
-		pT = pT.clamp(max=1 - eps)
-	L = -C * ((1 - eps) * torch.log(pT) + eps * torch.log(1 - pT))
-	return L, M
-
-# Relative dual negative log likelihood loss (Inf-norm)
-def rdnlli_loss(x, eps, cap):
-	M = loss_common(x, eps, loss_funcs.AUTO_TAU_L)
-	mu = 1 - eps - eps / (M.K - 1)
-	C = math.sqrt((M.K - 1) / M.K) / mu
-	targetpT = torch.amax(M.p[:, 1:].detach(), dim=1, keepdim=True) + mu
-	pT = M.p[:, :1]
-	if cap:
-		pT = pT.clamp(max=targetpT)
-	L = -C * (targetpT * torch.log(pT) + (1 - targetpT) * torch.log(1 - pT))
-	return L, M
-
-# Relative dual negative log likelihood loss (2-norm)
-def rdnll2_loss(x, eps, cap, cgrad):
-	M = loss_common(x, eps, loss_funcs.AUTO_TAU_L)
-	mu = 1 - eps - eps / math.sqrt(M.K - 1)
-	C = math.sqrt((M.K - 1) / M.K) / ((1 - eps - 1 / M.K) * (1 + 1 / math.sqrt(M.K - 1)))
-	pF = M.p[:, 1:]
-	if not cgrad:
-		pF = pF.detach()
-	targetpT = torch.linalg.norm(pF, dim=1, keepdim=True) + mu
-	pT = M.p[:, :1]
-	if cap:
-		pT = pT.clamp(max=targetpT)
-	L = -C * (targetpT * torch.log(pT) + (1 - targetpT) * torch.log(1 - pT))
-	return L, M
-
-# Max-logit dual negative log likelihood loss
-def mdnll_loss(x, eps, cap, cgrad):
-	M = loss_common(x, eps, loss_funcs.AUTO_TAU_L)
-	C = 0.5 * math.sqrt((M.K - 1) / M.K) / (1 - eps - 1 / M.K)
-	pTD = M.p[:, :1]
-	if not cgrad:
-		pTD = pTD.detach()
-	targetpT = 2 * (1 - eps) - pTD
-	pT = M.p[:, :1]
-	if cap:
-		pT = pT.clamp(max=targetpT)
-	L = -C * (targetpT * torch.log(pT) + (1 - targetpT) * torch.log(1 - pT))
-	return L, M
-
-# Relative raw logit loss
-def rrl_loss(x, eps, cap):
-	M = loss_common(x, eps, loss_funcs.AUTO_TAU_L)
-	z = x - x[:, :1]
-	z[:, 1:] += M.eta
-	if cap:
-		z.clamp_(min=0)
-	J = z.square().sum(dim=1, keepdim=True) - torch.square(z.sum(dim=1, keepdim=True)) / M.K
-	C = math.sqrt(M.K / (M.K - 1)) / (2 * M.eta)
-	L = C * J
-	return L, M
-
-# Manually capped relative raw logit loss autograd function
-# noinspection PyMethodOverriding, PyAbstractClass
-class MRRLCapFunction(torch.autograd.Function):
-
-	@staticmethod
-	def forward(ctx, x, M):
-		ctx.set_materialize_grads(False)
-		C = math.sqrt(M.K / (M.K - 1)) / M.eta
-		z = x - x[:, :1]
-		z[:, 1:] += M.eta
-		z.clamp_(min=0)
-		grad = C * z
-		grad -= grad.sum(dim=1, keepdim=True) / M.K
-		L = grad.square().sum(dim=1, keepdim=True)
-		ctx.save_for_backward(grad)
-		return L
-
-	@staticmethod
-	@torch.autograd.function.once_differentiable
-	def backward(ctx, gradL):
-		if gradL is None or not ctx.needs_input_grad[0]:
-			return None
-		grad, = ctx.saved_tensors
-		return grad, None
-
-# Manually capped relative raw logit loss
-def mrrl_cap_loss(x, eps):
-	M = loss_common(x, eps, loss_funcs.AUTO_TAU_L)
-	L = MRRLCapFunction.apply(x, M)
-	return L, M
-
-# Saturated relative raw logit loss
-def srrl_loss(x, eps, tau, cap):
-	M = loss_common(x, eps, tau=tau)
-	delta = ((1 - M.tau) / M.tau) * ((M.K - 1) / M.K) * M.eta * M.eta
-	z = x - x[:, :1]
-	z[:, 1:] += M.eta
-	if cap:
-		z.clamp_(min=0)
-	J = z.square().sum(dim=1, keepdim=True) - torch.square(z.sum(dim=1, keepdim=True)) / M.K
-	C = 1 / math.sqrt(M.tau)
-	L = C * torch.sqrt(J + delta)
-	return L, M
-
-# Manually capped saturated relative raw logit loss autograd function
-# noinspection PyMethodOverriding, PyAbstractClass
-class MSRRLCapFunction(torch.autograd.Function):
-
-	@staticmethod
-	def forward(ctx, x, M):
-		ctx.set_materialize_grads(False)
-		delta = ((1 - M.tau) / M.tau) * ((M.K - 1) / M.K) * M.eta * M.eta
-		C = 1 / math.sqrt(M.tau)
-		z = x - x[:, :1]
-		z[:, 1:] += M.eta
-		z.clamp_(min=0)
-		J = z.square().sum(dim=1, keepdim=True) - torch.square(z.sum(dim=1, keepdim=True)) / M.K
-		hJ = C / torch.sqrt(J + delta)
-		grad = hJ * z
-		grad -= grad.sum(dim=1, keepdim=True) / M.K
-		L = grad.square().sum(dim=1, keepdim=True)
-		ctx.save_for_backward(grad)
-		return L
-
-	@staticmethod
-	@torch.autograd.function.once_differentiable
-	def backward(ctx, gradL):
-		if gradL is None or not ctx.needs_input_grad[0]:
-			return None
-		grad, = ctx.saved_tensors
-		return grad, None
-
-# Manually capped saturated relative raw logit loss
-def msrrl_cap_loss(x, eps, tau):
-	M = loss_common(x, eps, tau=tau)
-	L = MSRRLCapFunction.apply(x, M)
-	return L, M
-
-# Manually capped exponentially saturated relative raw logit loss autograd function
-# noinspection PyMethodOverriding, PyAbstractClass
-class MESRRLCapFunction(torch.autograd.Function):
-
-	@staticmethod
-	def forward(ctx, x, M):
-		ctx.set_materialize_grads(False)
-		C = (1 - M.eps) / ((M.K - 1) / M.K - M.eps)
-		beta = (M.K / (M.K - 1)) / (C * M.eta) ** 2
-		z = x - x[:, :1]
-		z[:, 1:] += M.eta
-		z.clamp_(min=0)
-		J = z.square().sum(dim=1, keepdim=True) - torch.square(z.sum(dim=1, keepdim=True)) / M.K
-		hJ = C * torch.sqrt(torch.tanh(beta * J) / J)
-		grad = hJ * z
-		grad -= grad.sum(dim=1, keepdim=True) / M.K
-		L = grad.square().sum(dim=1, keepdim=True)
-		ctx.save_for_backward(grad)
-		return L
-
-	@staticmethod
-	@torch.autograd.function.once_differentiable
-	def backward(ctx, gradL):
-		if gradL is None or not ctx.needs_input_grad[0]:
-			return None
-		grad, = ctx.saved_tensors
-		return grad, None
-
-# Manually capped exponentially saturated relative raw logit loss
-def mesrrl_cap_loss(x, eps):
-	M = loss_common(x, eps, loss_funcs.AUTO_TAU_L)
-	L = MESRRLCapFunction.apply(x, M)
-	return L, M
-
-# Loss map
-LOSS_MAP_OLD = dict(  # TODO: Verify that all these are perfectly reimplemented then delete all the OLD stuff! (search for '# OLD')
-	mse=('MSE', lambda x, eps, tau: mse_loss(x)),
-	nll=('NLL', lambda x, eps, tau: nll_loss(x)),
-	focal=('Focal', lambda x, eps, tau: focal_loss(x)),
-
-	kldiv=('KLDiv', lambda x, eps, tau: kldiv_loss(x, eps)),
-	snll=('SNLL', lambda x, eps, tau: snll_loss(x, eps)),
-	dnll=('DNLL', lambda x, eps, tau: dnll_loss(x, eps, cap=False)),
-	dnllcap=('DNLLCap', lambda x, eps, tau: dnll_loss(x, eps, cap=True)),
-
-	rdnlli=('RDNLLI', lambda x, eps, tau: rdnlli_loss(x, eps, cap=False)),
-	rdnllicap=('RDNLLICap', lambda x, eps, tau: rdnlli_loss(x, eps, cap=True)),
-	rdnll2=('RDNLL2', lambda x, eps, tau: rdnll2_loss(x, eps, cap=False, cgrad=False)),
-	rdnll2cap=('RDNLL2Cap', lambda x, eps, tau: rdnll2_loss(x, eps, cap=True, cgrad=False)),
-	rdnll2grad=('RDNLL2Grad', lambda x, eps, tau: rdnll2_loss(x, eps, cap=False, cgrad=True)),
-	rdnll2capgrad=('RDNLL2CapGrad', lambda x, eps, tau: rdnll2_loss(x, eps, cap=True, cgrad=True)),
-
-	mdnll=('MDNLL', lambda x, eps, tau: mdnll_loss(x, eps, cap=False, cgrad=False)),
-	mdnllcap=('MDNLLCap', lambda x, eps, tau: mdnll_loss(x, eps, cap=True, cgrad=False)),
-	mdnllgrad=('MDNLLGrad', lambda x, eps, tau: mdnll_loss(x, eps, cap=False, cgrad=True)),
-	mdnllcapgrad=('MDNLLCapGrad', lambda x, eps, tau: mdnll_loss(x, eps, cap=True, cgrad=True)),
-
-	rrl=('RRL', lambda x, eps, tau: rrl_loss(x, eps, cap=False)),
-	mrrlcap=('MRRLCap', lambda x, eps, tau: mrrl_cap_loss(x, eps)),
-
-	srrl=('SRRL', lambda x, eps, tau: srrl_loss(x, eps, tau, cap=False)),
-	msrrlcap=('MSRRLCap', lambda x, eps, tau: msrrl_cap_loss(x, eps, tau)),
-
-	mesrrlcap=('MESRRLCap', lambda x, eps, tau: mesrrl_cap_loss(x, eps)),
-)
-# OLD STOP
 
 # Run main function
 if __name__ == "__main__":
