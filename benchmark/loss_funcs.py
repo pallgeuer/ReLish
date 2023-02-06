@@ -222,7 +222,16 @@ class RRLLoss(ClassificationLoss):
 		logit_terms_sumsq = logit_terms.sum(dim=1, keepdim=True).square_()
 		return self.reduce_loss(logit_terms.square_().sum(dim=1, keepdim=True).sub_(logit_terms_sumsq, alpha=1 / self.num_classes))
 
-# TODO: Manually capped relative raw logit loss => MRRLCapLoss
+# Manually capped relative raw logit loss
+class MRRLCapLoss(ClassificationLoss):
+
+	def __init__(self, num_classes, normed=True, reduction='mean', eps=DEFAULT_EPS):
+		eta = math.log(1 - eps) - math.log(eps / (num_classes - 1))
+		norm_scale = math.sqrt(num_classes / (num_classes - 1)) / eta
+		super().__init__(num_classes, normed, norm_scale, reduction, eps=eps, eta=eta)
+
+	def loss(self, logits, target):
+		return self.reduce_loss(MRRLCapFunction.apply(logits, target, self.num_classes, self.norm_scale, self.eta))
 
 # Saturated relative raw logit loss
 class SRRLLoss(ClassificationLoss):
@@ -324,4 +333,22 @@ def dual_log_softmax(inp: torch.Tensor, dim: Optional[int] = None) -> tuple[torc
 def _get_softmax_dim(name: str, ndim: int) -> int:
 	warnings.warn(f"Implicit dimension choice for {name} has been deprecated. Change the call to include dim=X as an argument.")
 	return 0 if ndim == 0 or ndim == 1 or ndim == 3 else 1
+
+# Manually capped relative raw logit loss autograd function
+# noinspection PyMethodOverriding, PyAbstractClass
+class MRRLCapFunction(torch.autograd.Function):
+
+	@staticmethod
+	def forward(ctx, logits, target, num_classes, norm_scale, eta):
+		ctx.set_materialize_grads(False)
+		target = target.unsqueeze(dim=1)
+		logit_terms = logits.sub(logits.gather(dim=1, index=target)).scatter_(dim=1, index=target, value=-eta).clamp_(min=-eta)
+		grad = logit_terms.sub_(logit_terms.mean(dim=1, keepdim=True))
+		ctx.save_for_backward(grad)
+		return grad.square().sum(dim=1, keepdim=True).mul_(norm_scale)
+
+	@staticmethod
+	@torch.autograd.function.once_differentiable
+	def backward(ctx, grad_loss):
+		return (grad_loss.mul(ctx.saved_tensors[0]) if grad_loss is not None and ctx.needs_input_grad[0] else None), None, None, None, None
 # EOF
