@@ -51,7 +51,6 @@ def main():
 	parser = argparse.ArgumentParser()
 	parser.add_argument('--device', type=str, default='cuda', help='Device to perform calculations on')
 	parser.add_argument('--eps', type=float, default=DEFAULT_EPS, help='Value of epsilon to use (for all but MSE, NLL, Focal)')
-	parser.add_argument('--tau', type=float, default=DEFAULT_TAU, help='Value of tau to use (for SRRL, MSRRL)')
 	parser.add_argument('--losses', type=str, nargs='+', default=list(loss_funcs.LOSSES.keys()), help='List of losses to consider')
 	parser.add_argument('--gradcheck', action='store_true', help='Perform grad check on custom autograd modules')
 	parser.add_argument('--evalx', type=float, nargs='+', help='Evaluate case where raw logits are as listed (first is true class)')
