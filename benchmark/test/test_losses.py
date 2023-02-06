@@ -481,7 +481,7 @@ def msrrl_cap_loss(x, eps, tau):
 	L = MSRRLCapFunction.apply(x, M)
 	return L, M
 
-# Manually capped exponentially saturated raw logit loss autograd function
+# Manually capped exponentially saturated relative raw logit loss autograd function
 # noinspection PyMethodOverriding, PyAbstractClass
 class MESRRLCapFunction(torch.autograd.Function):
 
@@ -509,7 +509,7 @@ class MESRRLCapFunction(torch.autograd.Function):
 		grad, = ctx.saved_tensors
 		return grad, None
 
-# Manually capped exponentially saturated raw logit loss
+# Manually capped exponentially saturated relative raw logit loss
 def mesrrl_cap_loss(x, eps):
 	M = loss_common(x, eps, AUTO_TAU_L)
 	L = MESRRLCapFunction.apply(x, M)
