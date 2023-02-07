@@ -16,7 +16,8 @@ import loss_funcs  # noqa
 # Constants
 DEFAULT_EPS = 0.2
 DEFAULT_TAU = loss_funcs.DEFAULT_TAU
-FIGSIZE = (9.6, 5.15)
+FIGSIZE = (9.60, 4.55)
+FIGDPI = 100
 
 #
 # Data types
@@ -191,7 +192,7 @@ def generate_plots(v, x, sit_var, sit_name, args):
 
 	M = loss_common(x, args.eps)
 
-	fig, axs = plt.subplots(2, 2, figsize=FIGSIZE)
+	fig, axs = plt.subplots(2, 2, figsize=FIGSIZE, dpi=FIGDPI)
 	fig.suptitle(f"{sit_name}: Logits and probabilities vs {sit_var}")
 	for i, (data, label) in enumerate(((x[:, :3], 'x'), (M.z[:, :2], 'z = xf - xT + eta'), (M.p[:, :3], 'p'), (M.q[:, :3], 'q = p - ptarget'))):
 		ax = axs[np.unravel_index(i, axs.shape)]
@@ -202,9 +203,9 @@ def generate_plots(v, x, sit_var, sit_name, args):
 		ax.set_title(label)
 	fig.tight_layout()
 
-	figX, axsX = plt.subplots(1, 3, figsize=FIGSIZE)
-	figZ, axsZ = plt.subplots(1, 2, figsize=FIGSIZE)
-	figL, axsL = plt.subplots(1, 2, figsize=FIGSIZE)
+	figX, axsX = plt.subplots(1, 3, figsize=FIGSIZE, dpi=FIGDPI)
+	figZ, axsZ = plt.subplots(1, 2, figsize=FIGSIZE, dpi=FIGDPI)
+	figL, axsL = plt.subplots(1, 2, figsize=FIGSIZE, dpi=FIGDPI)
 	figX.suptitle(f"{sit_name}: Logit update rate vs {sit_var}")
 	figZ.suptitle(f"{sit_name}: Relative logit update rate vs {sit_var}")
 	figL.suptitle(f"{sit_name}: Loss value and rate vs {sit_var}")
