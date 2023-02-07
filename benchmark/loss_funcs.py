@@ -225,16 +225,16 @@ class RRLLoss(ClassificationLoss):
 		logit_terms_sumsq = logit_terms.sum(dim=1, keepdim=True).square_()
 		return self.reduce_loss(logit_terms.square_().sum(dim=1, keepdim=True).sub_(logit_terms_sumsq, alpha=1 / self.num_classes))
 
-# Manually capped relative raw logit loss
-class MRRLCapLoss(ClassificationLoss):
+# Manual relative raw logit loss
+class MRRLLoss(ClassificationLoss):
 
-	def __init__(self, num_classes, normed=True, reduction='mean', eps=DEFAULT_EPS):
+	def __init__(self, num_classes, normed=True, reduction='mean', eps=DEFAULT_EPS, cap=True):
 		eta = math.log(1 - eps) - math.log(eps / (num_classes - 1))
 		norm_scale = math.sqrt(num_classes / (num_classes - 1)) / eta
-		super().__init__(num_classes, normed, norm_scale, reduction, eps=eps, eta=eta)
+		super().__init__(num_classes, normed, norm_scale, reduction, eps=eps, eta=eta, cap=cap)
 
 	def loss(self, logits, target):
-		return self.reduce_loss(MRRLCapFunction.apply(logits, target, self.num_classes, self.norm_scale, self.eta))
+		return self.reduce_loss(MRRLFunction.apply(logits, target, self.num_classes, self.norm_scale, self.eta, self.cap))
 
 # Saturated relative raw logit loss
 class SRRLLoss(ClassificationLoss):
@@ -253,30 +253,30 @@ class SRRLLoss(ClassificationLoss):
 		J = logit_terms.square_().sum(dim=1, keepdim=True).sub_(logit_terms_sumsq, alpha=1 / self.num_classes)
 		return self.reduce_loss(J.add_(self.delta).sqrt_())
 
-# Manually capped saturated relative raw logit loss
-class MSRRLCapLoss(ClassificationLoss):
+# Manual saturated relative raw logit loss
+class MSRRLLoss(ClassificationLoss):
 
-	def __init__(self, num_classes, normed=True, reduction='mean', eps=DEFAULT_EPS, tau=DEFAULT_TAU):
+	def __init__(self, num_classes, normed=True, reduction='mean', eps=DEFAULT_EPS, tau=DEFAULT_TAU, cap=True):
 		eta = math.log(1 - eps) - math.log(eps / (num_classes - 1))
 		tau = resolve_tau(tau, num_classes, eps, eta)
 		delta = ((1 - tau) / tau) * ((num_classes - 1) / num_classes) * eta * eta
 		norm_scale = 1 / math.sqrt(tau)
-		super().__init__(num_classes, normed, norm_scale, reduction, eps=eps, tau=tau, eta=eta, delta=delta)
+		super().__init__(num_classes, normed, norm_scale, reduction, eps=eps, tau=tau, eta=eta, delta=delta, cap=cap)
 
 	def loss(self, logits, target):
-		return self.reduce_loss(MSRRLCapFunction.apply(logits, target, self.num_classes, self.norm_scale, self.eta, self.delta))
+		return self.reduce_loss(MSRRLFunction.apply(logits, target, self.num_classes, self.norm_scale, self.eta, self.delta, self.cap))
 
-# Manually capped exponentially saturated relative raw logit loss
-class MESRRLCapLoss(ClassificationLoss):
+# Manual exponentially saturated relative raw logit loss
+class MESRRLLoss(ClassificationLoss):
 
-	def __init__(self, num_classes, normed=True, reduction='mean', eps=DEFAULT_EPS):
+	def __init__(self, num_classes, normed=True, reduction='mean', eps=DEFAULT_EPS, cap=True):
 		eta = math.log(1 - eps) - math.log(eps / (num_classes - 1))
 		norm_scale = (1 - eps) / ((num_classes - 1) / num_classes - eps)
 		beta = (num_classes / (num_classes - 1)) / (norm_scale * eta) ** 2
-		super().__init__(num_classes, normed, norm_scale, reduction, eps=eps, eta=eta, beta=beta)
+		super().__init__(num_classes, normed, norm_scale, reduction, eps=eps, eta=eta, beta=beta, cap=cap)
 
 	def loss(self, logits, target):
-		return self.reduce_loss(MESRRLCapFunction.apply(logits, target, self.num_classes, self.norm_scale, self.eta, self.beta))
+		return self.reduce_loss(MESRRLFunction.apply(logits, target, self.num_classes, self.norm_scale, self.eta, self.beta, self.cap))
 
 #
 # Loss maps
@@ -375,15 +375,17 @@ def resolve_tau(tau, num_classes, eps, eta):
 		raise ValueError(f"Invalid tau value: {tau}")
 	return tau
 
-# Manually capped relative raw logit loss autograd function
+# Manual relative raw logit loss autograd function
 # noinspection PyMethodOverriding, PyAbstractClass
-class MRRLCapFunction(torch.autograd.Function):
+class MRRLFunction(torch.autograd.Function):
 
 	@staticmethod
-	def forward(ctx, logits, target, num_classes, norm_scale, eta):
+	def forward(ctx, logits, target, num_classes, norm_scale, eta, cap):
 		ctx.set_materialize_grads(False)
 		target = target.unsqueeze(dim=1)
-		logit_terms = logits.sub(logits.gather(dim=1, index=target)).scatter_(dim=1, index=target, value=-eta).clamp_(min=-eta)
+		logit_terms = logits.sub(logits.gather(dim=1, index=target)).scatter_(dim=1, index=target, value=-eta)
+		if cap:
+			logit_terms.clamp_(min=-eta)
 		grad = logit_terms.sub_(logit_terms.mean(dim=1, keepdim=True))
 		ctx.save_for_backward(grad)
 		return grad.square().sum(dim=1, keepdim=True).mul_(norm_scale)
@@ -391,17 +393,19 @@ class MRRLCapFunction(torch.autograd.Function):
 	@staticmethod
 	@torch.autograd.function.once_differentiable
 	def backward(ctx, grad_loss):
-		return (grad_loss.mul(ctx.saved_tensors[0]) if grad_loss is not None and ctx.needs_input_grad[0] else None), None, None, None, None
+		return (grad_loss.mul(ctx.saved_tensors[0]) if grad_loss is not None and ctx.needs_input_grad[0] else None), None, None, None, None, None
 
-# Manually capped saturated relative raw logit loss autograd function
+# Manual saturated relative raw logit loss autograd function
 # noinspection PyMethodOverriding, PyAbstractClass
-class MSRRLCapFunction(torch.autograd.Function):
+class MSRRLFunction(torch.autograd.Function):
 
 	@staticmethod
-	def forward(ctx, logits, target, num_classes, norm_scale, eta, delta):
+	def forward(ctx, logits, target, num_classes, norm_scale, eta, delta, cap):
 		ctx.set_materialize_grads(False)
 		target = target.unsqueeze(dim=1)
-		logit_terms = logits.sub(logits.gather(dim=1, index=target)).scatter_(dim=1, index=target, value=-eta).clamp_(min=-eta)
+		logit_terms = logits.sub(logits.gather(dim=1, index=target)).scatter_(dim=1, index=target, value=-eta)
+		if cap:
+			logit_terms.clamp_(min=-eta)
 		logit_terms_sumsq = logit_terms.sum(dim=1, keepdim=True).square_()
 		J = logit_terms.square().sum(dim=1, keepdim=True).sub_(logit_terms_sumsq, alpha=1 / num_classes)
 		grad = logit_terms.div_(J.add_(delta).sqrt_()).sub_(logit_terms.mean(dim=1, keepdim=True))
@@ -411,17 +415,19 @@ class MSRRLCapFunction(torch.autograd.Function):
 	@staticmethod
 	@torch.autograd.function.once_differentiable
 	def backward(ctx, grad_loss):
-		return (grad_loss.mul(ctx.saved_tensors[0]) if grad_loss is not None and ctx.needs_input_grad[0] else None), None, None, None, None, None
+		return (grad_loss.mul(ctx.saved_tensors[0]) if grad_loss is not None and ctx.needs_input_grad[0] else None), None, None, None, None, None, None
 
-# Manually capped exponentially saturated relative raw logit loss autograd function
+# Manual exponentially saturated relative raw logit loss autograd function
 # noinspection PyMethodOverriding, PyAbstractClass
-class MESRRLCapFunction(torch.autograd.Function):
+class MESRRLFunction(torch.autograd.Function):
 
 	@staticmethod
-	def forward(ctx, logits, target, num_classes, norm_scale, eta, beta):
+	def forward(ctx, logits, target, num_classes, norm_scale, eta, beta, cap):
 		ctx.set_materialize_grads(False)
 		target = target.unsqueeze(dim=1)
-		logit_terms = logits.sub(logits.gather(dim=1, index=target)).scatter_(dim=1, index=target, value=-eta).clamp_(min=-eta)
+		logit_terms = logits.sub(logits.gather(dim=1, index=target)).scatter_(dim=1, index=target, value=-eta)
+		if cap:
+			logit_terms.clamp_(min=-eta)
 		logit_terms_sumsq = logit_terms.sum(dim=1, keepdim=True).square_()
 		J = logit_terms.square().sum(dim=1, keepdim=True).sub_(logit_terms_sumsq, alpha=1 / num_classes)
 		grad = logit_terms.mul_(J.mul(beta).tanh_().div_(J).sqrt_()).sub_(logit_terms.mean(dim=1, keepdim=True))
@@ -431,5 +437,5 @@ class MESRRLCapFunction(torch.autograd.Function):
 	@staticmethod
 	@torch.autograd.function.once_differentiable
 	def backward(ctx, grad_loss):
-		return (grad_loss.mul(ctx.saved_tensors[0]) if grad_loss is not None and ctx.needs_input_grad[0] else None), None, None, None, None, None
+		return (grad_loss.mul(ctx.saved_tensors[0]) if grad_loss is not None and ctx.needs_input_grad[0] else None), None, None, None, None, None, None
 # EOF
