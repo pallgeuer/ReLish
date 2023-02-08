@@ -424,12 +424,12 @@ def load_model(C, num_classes, in_shape, details=False):
 # Load the criterion
 def load_criterion(C, num_classes, details=False):
 
-	normed = C.loss.endswith('_')
-	loss = C.loss[:-1] if normed else C.loss
-
-	if loss == 'nllloss':
-		criterion = loss_funcs.NLLLoss(num_classes, normed=normed)
-	else:
+	criterion = None
+	if C.loss == 'nllloss':
+		criterion = nn.CrossEntropyLoss(reduction='mean')
+	if not criterion and (match := re.fullmatch(r'([^-]*[^_-])(_)?(-((\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?))?', C.loss)):
+		criterion = loss_funcs.create_loss_module(name=match.group(1), num_classes=num_classes, normed=not match.group(2), reduction='mean', eps=match.group(4) and float(match.group(4)))
+	if not criterion:
 		raise ValueError(f"Invalid criterion/loss specification: {C.loss}")
 
 	criterion.to(device=C.device)

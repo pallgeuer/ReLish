@@ -304,7 +304,22 @@ def generate_loss_map() -> dict[str, tuple[str, Callable]]:
 				loss_map[extra_loss_name.lower()] = (extra_loss_name, functools.partial(cls_obj, **extra_param_dict) if extra_param_dict else cls_obj)
 	# noinspection PyTypeChecker
 	return dict(sorted(loss_map.items()))
+
+# Available losses in this module
 LOSSES = generate_loss_map()
+
+# Create a loss module by name and parameters
+def create_loss_module(name, num_classes, normed=True, reduction='mean', eps=None, **kwargs):
+	if eps is None:
+		eps = DEFAULT_EPS
+	name_lower = name.lower()
+	if name_lower not in LOSSES:
+		return None
+	loss_factory = LOSSES[name_lower][1]
+	params = dict(num_classes=num_classes, normed=normed, reduction=reduction, eps=eps, **kwargs)
+	factory_param_keys = inspect.signature(loss_factory).parameters.keys()
+	params = {key: value for key, value in params.items() if key in factory_param_keys}
+	return loss_factory(**params)
 
 #
 # Helper modules
