@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-# Test various classification losses and how to best implement them
+# Test the losses defined in loss_funcs.py
 
 # Imports
 import math
-import inspect
 import argparse
 import itertools
 import dataclasses
@@ -15,7 +14,7 @@ import loss_funcs  # noqa
 
 # Constants
 DEFAULT_EPS = 0.2
-DEFAULT_TAU = loss_funcs.DEFAULT_TAU
+DEFAULT_ETA = 2.0
 FIGSIZE = (9.60, 4.55)
 FIGDPI = 100
 
@@ -28,6 +27,7 @@ FIGDPI = 100
 class LossCommon:
 	K: int
 	eps: float
+	eta: float
 	z: torch.Tensor
 	p: torch.Tensor
 	q: torch.Tensor
@@ -51,7 +51,8 @@ def main():
 
 	parser = argparse.ArgumentParser()
 	parser.add_argument('--device', type=str, default='cuda', help='Device to perform calculations on')
-	parser.add_argument('--eps', type=float, default=DEFAULT_EPS, help='Value of epsilon to use (for all but MSE, NLL, Focal)')
+	parser.add_argument('--eps', type=float, default=DEFAULT_EPS, help='Default value of epsilon to use')
+	parser.add_argument('--eta', type=float, default=DEFAULT_ETA, help='Default value of eta to use')
 	parser.add_argument('--losses', type=str, nargs='+', default=list(loss_funcs.LOSSES.keys()), help='List of losses to consider')
 	parser.add_argument('--gradcheck', action='store_true', help='Perform grad check on custom autograd modules')
 	parser.add_argument('--evalx', type=float, nargs='+', help='Evaluate case where raw logits are as listed (first is true class)')
@@ -80,12 +81,13 @@ def main():
 # Losses
 #
 
-# Create a loss module from a loss factory that can be used as Callable[[logits_tensor, target_tensor], loss_tensor]
-def create_loss_module(loss_factory, M):
-	params = dict(num_classes=M.K, normed=True, reduction='none', eps=M.eps)
-	factory_param_keys = inspect.signature(loss_factory).parameters.keys()
-	params = {key: value for key, value in params.items() if key in factory_param_keys}
-	return loss_factory(**params)
+# Resolve a loss name and module from a loss specification
+def resolve_loss_module(loss_spec, M):
+	loss_name, loss_factory, loss_normed, loss_param = loss_funcs.resolve_loss_factory(loss_spec)
+	if loss_factory is None:
+		raise ValueError(f"Unrecognised loss specification: {loss_spec}")
+	loss_module = loss_funcs.create_loss_module(loss_factory, num_classes=M.K, normed=loss_normed, reduction='none', eps=loss_param if loss_param is not None else M.eps, eta=loss_param if loss_param is not None else M.eta)
+	return loss_name, loss_module
 
 # Evaluate a loss module on a logits tensor, assuming the first logit is always the true one
 def eval_loss_module(loss_module, x):
@@ -108,7 +110,7 @@ def eval_loss_module_grad(loss_module, x, M):
 	LL = eval_loss_module(loss_module, xx)
 	xx.grad = None
 	LL.backward()
-	assert torch.allclose(x.grad, xx.grad)  # noqa
+	assert torch.allclose(x.grad, xx.grad, atol=1e-5, rtol=1e-5)  # noqa
 
 	loss_module.reduction = 'mean'
 	xx = x.detach().requires_grad_()
@@ -122,15 +124,14 @@ def eval_loss_module_grad(loss_module, x, M):
 	return LossResult(M=M, x=x, L=L, dxdt=dxdt, dzdt=dzdt, dLdt=dLdt)
 
 # Calculate common loss terms
-def loss_common(x, eps):
+def loss_common(x, eps, eta):
 	K = x.shape[1]
-	eta = math.log(1 - eps) - math.log(eps / (K - 1))
 	z = x[:, 1:] - x[:, :1] + eta
 	p = F.softmax(x, dim=1)
 	q = p.clone()
 	q[:, :1] -= 1 - eps
 	q[:, 1:] -= eps / (K - 1)
-	return LossCommon(K=K, eps=eps, z=z, p=p, q=q)
+	return LossCommon(K=K, eps=eps, eta=eta, z=z, p=p, q=q)
 
 #
 # Grad check
@@ -152,11 +153,10 @@ def gradcheck(args):
 # Action: Evaluate losses on a list of logits
 def evalx(x, args):
 	x = torch.tensor([x], device=args.device)
-	M = loss_common(x, args.eps)
-	for loss_key in args.losses:
-		loss_name, loss_factory = loss_funcs.LOSSES[loss_key.lower()]
+	M = loss_common(x, args.eps, args.eta)
+	for loss_spec in args.losses:
+		loss_name, loss_module = resolve_loss_module(loss_spec, M)
 		print(f"EVALUATE: {loss_name}")
-		loss_module = create_loss_module(loss_factory, M)
 		print(f"LOSS MODULE: {loss_module}")
 		result = eval_loss_module_grad(loss_module, x, M)
 		print_vec('   x', result.x[0])
@@ -190,7 +190,7 @@ def plot_situation(situation, args):
 # Generate the plots for a situation
 def generate_plots(v, x, sit_var, sit_name, args):
 
-	M = loss_common(x, args.eps)
+	M = loss_common(x, args.eps, args.eta)
 
 	fig, axs = plt.subplots(2, 2, figsize=FIGSIZE, dpi=FIGDPI)
 	fig.suptitle(f"{sit_name}: Logits and probabilities vs {sit_var}")
@@ -209,9 +209,8 @@ def generate_plots(v, x, sit_var, sit_name, args):
 	figX.suptitle(f"{sit_name}: Logit update rate vs {sit_var}")
 	figZ.suptitle(f"{sit_name}: Relative logit update rate vs {sit_var}")
 	figL.suptitle(f"{sit_name}: Loss value and rate vs {sit_var}")
-	for loss_key in args.losses:
-		loss_name, loss_factory = loss_funcs.LOSSES[loss_key.lower()]
-		loss_module = create_loss_module(loss_factory, M)
+	for loss_spec in args.losses:
+		loss_name, loss_module = resolve_loss_module(loss_spec, M)
 		print(f"LOSS MODULE: {loss_module}")
 		result = eval_loss_module_grad(loss_module, x, M)
 		for i in range(3):

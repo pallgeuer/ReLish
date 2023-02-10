@@ -1,6 +1,7 @@
 # Loss functions
 
 # Imports
+import re
 import sys
 import math
 import inspect
@@ -14,10 +15,8 @@ import torch.nn.functional as F
 
 # Constants
 DEFAULT_EPS = 0.1
-AUTO_TAU_L = -3
-AUTO_TAU_M = -2
-AUTO_TAU_H = -1
-DEFAULT_TAU = AUTO_TAU_L
+DEFAULT_ETA = 2.0
+DEFAULT_TAU = 2.0
 
 #
 # Classification losses
@@ -214,10 +213,9 @@ class MDNLLLoss(ClassificationLoss):
 # Relative raw logit loss
 class RRLLoss(ClassificationLoss):
 
-	def __init__(self, num_classes, normed=True, reduction='mean', eps=DEFAULT_EPS):
-		eta = math.log(1 - eps) - math.log(eps / (num_classes - 1))
+	def __init__(self, num_classes, normed=True, reduction='mean', eta=DEFAULT_ETA):
 		norm_scale = math.sqrt(num_classes / (num_classes - 1)) / (2 * eta)
-		super().__init__(num_classes, normed, norm_scale, reduction, eps=eps, eta=eta)
+		super().__init__(num_classes, normed, norm_scale, reduction, eta=eta)
 
 	def loss(self, logits, target):
 		target = target.unsqueeze(dim=1)
@@ -228,10 +226,9 @@ class RRLLoss(ClassificationLoss):
 # Manual relative raw logit loss
 class MRRLLoss(ClassificationLoss):
 
-	def __init__(self, num_classes, normed=True, reduction='mean', eps=DEFAULT_EPS, cap=True):
-		eta = math.log(1 - eps) - math.log(eps / (num_classes - 1))
-		norm_scale = math.sqrt(num_classes / (num_classes - 1)) / eta
-		super().__init__(num_classes, normed, norm_scale, reduction, eps=eps, eta=eta, cap=cap)
+	def __init__(self, num_classes, normed=True, reduction='mean', eta=DEFAULT_ETA, cap=True):
+		norm_scale = math.sqrt(num_classes / (num_classes - 1)) / (2 * eta)
+		super().__init__(num_classes, normed, norm_scale, reduction, eta=eta, cap=cap)
 
 	def loss(self, logits, target):
 		return self.reduce_loss(MRRLFunction.apply(logits, target, self.num_classes, self.norm_scale, self.eta, self.cap))
@@ -239,12 +236,10 @@ class MRRLLoss(ClassificationLoss):
 # Saturated relative raw logit loss
 class SRRLLoss(ClassificationLoss):
 
-	def __init__(self, num_classes, normed=True, reduction='mean', eps=DEFAULT_EPS, tau=DEFAULT_TAU):
-		eta = math.log(1 - eps) - math.log(eps / (num_classes - 1))
-		tau = resolve_tau(tau, num_classes, eps, eta)
-		delta = ((1 - tau) / tau) * ((num_classes - 1) / num_classes) * eta * eta
-		norm_scale = 1 / math.sqrt(tau)
-		super().__init__(num_classes, normed, norm_scale, reduction, normed_inplace=False, eps=eps, tau=tau, eta=eta, delta=delta)
+	def __init__(self, num_classes, normed=True, reduction='mean', eta=DEFAULT_ETA, tau=DEFAULT_TAU):
+		delta = tau * eta * eta * ((num_classes - 1) / num_classes)
+		norm_scale = math.sqrt(tau)
+		super().__init__(num_classes, normed, norm_scale, reduction, normed_inplace=False, eta=eta, tau=tau, delta=delta)
 
 	def loss(self, logits, target):
 		target = target.unsqueeze(dim=1)
@@ -256,12 +251,10 @@ class SRRLLoss(ClassificationLoss):
 # Manual saturated relative raw logit loss
 class MSRRLLoss(ClassificationLoss):
 
-	def __init__(self, num_classes, normed=True, reduction='mean', eps=DEFAULT_EPS, tau=DEFAULT_TAU, cap=True):
-		eta = math.log(1 - eps) - math.log(eps / (num_classes - 1))
-		tau = resolve_tau(tau, num_classes, eps, eta)
-		delta = ((1 - tau) / tau) * ((num_classes - 1) / num_classes) * eta * eta
-		norm_scale = 1 / math.sqrt(tau)
-		super().__init__(num_classes, normed, norm_scale, reduction, eps=eps, tau=tau, eta=eta, delta=delta, cap=cap)
+	def __init__(self, num_classes, normed=True, reduction='mean', eta=DEFAULT_ETA, tau=DEFAULT_TAU, cap=True):
+		delta = tau * eta * eta * ((num_classes - 1) / num_classes)
+		norm_scale = math.sqrt(tau)
+		super().__init__(num_classes, normed, norm_scale, reduction, eta=eta, tau=tau, delta=delta, cap=cap)
 
 	def loss(self, logits, target):
 		return self.reduce_loss(MSRRLFunction.apply(logits, target, self.num_classes, self.norm_scale, self.eta, self.delta, self.cap))
@@ -269,11 +262,10 @@ class MSRRLLoss(ClassificationLoss):
 # Manual exponentially saturated relative raw logit loss
 class MESRRLLoss(ClassificationLoss):
 
-	def __init__(self, num_classes, normed=True, reduction='mean', eps=DEFAULT_EPS, cap=True):
-		eta = math.log(1 - eps) - math.log(eps / (num_classes - 1))
+	def __init__(self, num_classes, normed=True, reduction='mean', eta=DEFAULT_ETA, cap=True):
 		norm_scale = (1 - eps) / ((num_classes - 1) / num_classes - eps)
 		beta = (num_classes / (num_classes - 1)) / (norm_scale * eta) ** 2
-		super().__init__(num_classes, normed, norm_scale, reduction, eps=eps, eta=eta, beta=beta, cap=cap)
+		super().__init__(num_classes, normed, norm_scale, reduction, eta=eta, beta=beta, cap=cap)
 
 	def loss(self, logits, target):
 		return self.reduce_loss(MESRRLFunction.apply(logits, target, self.num_classes, self.norm_scale, self.eta, self.beta, self.cap))
@@ -293,7 +285,7 @@ def generate_loss_map() -> dict[str, tuple[str, Callable]]:
 			if 'all_probs' in loss_params:
 				extra_params.append(('all_probs', (('', False), ('All', True))))
 			if 'tau' in loss_params:
-				extra_params.append(('tau', (('L', AUTO_TAU_L), ('M', AUTO_TAU_M), ('H', AUTO_TAU_H))))
+				extra_params.append(('tau', (('L', 1), ('M', 2), ('H', 3))))
 			if 'cap' in loss_params:
 				extra_params.append(('cap', (('', False), ('Cap', True))))
 			if 'detach' in loss_params:
@@ -308,18 +300,31 @@ def generate_loss_map() -> dict[str, tuple[str, Callable]]:
 # Available losses in this module
 LOSSES = generate_loss_map()
 
-# Create a loss module by name and parameters
-def create_loss_module(name, num_classes, normed=True, reduction='mean', eps=None, **kwargs):
-	if eps is None:
-		eps = DEFAULT_EPS
-	name_lower = name.lower()
-	if name_lower not in LOSSES:
-		return None
-	loss_factory = LOSSES[name_lower][1]
-	params = dict(num_classes=num_classes, normed=normed, reduction=reduction, eps=eps, **kwargs)
+# Resolve a loss name, factory, normed and eps/eta parameter value from a loss specification
+def resolve_loss_factory(loss_spec: str) -> tuple[Optional[str], Optional[Callable], Optional[bool], Optional[float]]:
+	match = re.fullmatch(r'([^-]*[^_-])(_)?(-((\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?))?', loss_spec)
+	if not match or (loss_key := match.group(1).lower()) not in LOSSES:
+		return None, None, None, None
+	loss_name, loss_factory = LOSSES[loss_key]
+	loss_normed = not match.group(2)
+	loss_param = float(match.group(4)) if match.group(4) else None
+	loss_name = f"{loss_name}{'' if loss_normed else '_'}{'' if loss_param is None else f'({loss_param:.4g})'}"
+	return loss_name, loss_factory, loss_normed, loss_param
+
+# Instantiate a loss module from a loss factory and parameters
+def create_loss_module(loss_factory: Callable, num_classes, normed=True, reduction='mean', eps=None, eta=None, **kwargs) -> ClassificationLoss:
+	params = dict(num_classes=num_classes, normed=normed, reduction=reduction, eps=eps if eps is not None else DEFAULT_EPS, eta=eta if eta is not None else DEFAULT_ETA, **kwargs)
 	factory_param_keys = inspect.signature(loss_factory).parameters.keys()
 	params = {key: value for key, value in params.items() if key in factory_param_keys}
-	return loss_factory(**params)
+	loss_module = loss_factory(**params)
+	return loss_module
+
+# Resolve a loss name and module from a loss specification
+def resolve_loss_module(loss_spec: str, num_classes, reduction='mean', **kwargs) -> tuple[Optional[str], Optional[ClassificationLoss]]:
+	loss_name, loss_factory, loss_normed, loss_param = resolve_loss_factory(loss_spec)
+	if not loss_factory:
+		return None, None
+	return loss_name, create_loss_module(loss_factory, num_classes, normed=loss_normed, reduction=reduction, eps=loss_param, eta=loss_param, **kwargs)
 
 #
 # Helper modules
@@ -376,20 +381,6 @@ def _get_softmax_dim(name: str, ndim: int) -> int:
 	warnings.warn(f"Implicit dimension choice for {name} has been deprecated. Change the call to include dim=X as an argument.")
 	return 0 if ndim == 0 or ndim == 1 or ndim == 3 else 1
 
-# Resolve a tau value
-def resolve_tau(tau, num_classes, eps, eta):
-	tauL = 1 - ((num_classes - 1) / (num_classes * num_classes)) * eta / (1 - eps - 1 / num_classes)
-	tauH = (1 - 1 / (num_classes * (1 - eps))) ** 2
-	if tau == AUTO_TAU_L:
-		tau = tauL
-	elif tau == AUTO_TAU_M:
-		tau = 2 / (1 / tauL + 1 / tauH)
-	elif tau == AUTO_TAU_H:
-		tau = tauH
-	if not 0 < tau < 1:
-		raise ValueError(f"Invalid tau value: {tau}")
-	return tau
-
 # Manual relative raw logit loss autograd function
 # noinspection PyMethodOverriding, PyAbstractClass
 class MRRLFunction(torch.autograd.Function):
@@ -402,8 +393,10 @@ class MRRLFunction(torch.autograd.Function):
 		if cap:
 			logit_terms.clamp_(min=-eta)
 		grad = logit_terms.sub_(logit_terms.mean(dim=1, keepdim=True))
+		loss = grad.square().sum(dim=1, keepdim=True)
+		grad.mul_(2)
 		ctx.save_for_backward(grad)
-		return grad.square().sum(dim=1, keepdim=True).mul_(norm_scale)
+		return loss
 
 	@staticmethod
 	@torch.autograd.function.once_differentiable
