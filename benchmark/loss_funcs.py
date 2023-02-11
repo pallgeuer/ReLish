@@ -395,10 +395,10 @@ class MRRLFunction(torch.autograd.Function):
 		if cap:
 			logit_terms.clamp_(min=-eta)
 		grad = logit_terms.sub_(logit_terms.mean(dim=1, keepdim=True))
-		loss = grad.square().sum(dim=1, keepdim=True)
+		J = grad.square().sum(dim=1, keepdim=True)
 		grad.mul_(2)
 		ctx.save_for_backward(grad)
-		return loss
+		return J
 
 	@staticmethod
 	@torch.autograd.function.once_differentiable
@@ -416,10 +416,10 @@ class MSRRLFunction(torch.autograd.Function):
 		logit_terms = logits.sub(logits.gather(dim=1, index=target)).scatter_(dim=1, index=target, value=-eta)
 		if cap:
 			logit_terms.clamp_(min=-eta)
-		logit_terms_sumsq = logit_terms.sum(dim=1, keepdim=True).square_()
-		J = logit_terms.square().sum(dim=1, keepdim=True).sub_(logit_terms_sumsq, alpha=1 / num_classes)
+		grad = logit_terms.sub_(logit_terms.mean(dim=1, keepdim=True))
+		J = grad.square().sum(dim=1, keepdim=True)
 		loss = J.add_(delta).sqrt_()
-		grad = logit_terms.div_(loss).sub_(logit_terms.mean(dim=1, keepdim=True))
+		grad.div_(loss)
 		ctx.save_for_backward(grad)
 		return loss.sub_(loss_offset)
 
