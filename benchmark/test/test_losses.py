@@ -29,6 +29,7 @@ class LossCommon:
 	eps: float
 	eta: float
 	z: torch.Tensor
+	J: torch.Tensor
 	p: torch.Tensor
 	q: torch.Tensor
 
@@ -127,11 +128,12 @@ def eval_loss_module_grad(loss_module, x, M):
 def loss_common(x, eps, eta):
 	K = x.shape[1]
 	z = x[:, 1:] - x[:, :1] + eta
+	J = z.square().sum(dim=1, keepdim=True).sub(z.sum(dim=1, keepdim=True).square(), alpha=1 / K)
 	p = F.softmax(x, dim=1)
 	q = p.clone()
 	q[:, :1] -= 1 - eps
 	q[:, 1:] -= eps / (K - 1)
-	return LossCommon(K=K, eps=eps, eta=eta, z=z, p=p, q=q)
+	return LossCommon(K=K, eps=eps, eta=eta, z=z, J=J, p=p, q=q)
 
 #
 # Grad check
@@ -194,12 +196,13 @@ def generate_plots(v, x, sit_var, sit_name, args):
 
 	fig, axs = plt.subplots(2, 2, figsize=FIGSIZE, dpi=FIGDPI)
 	fig.suptitle(f"{sit_name}: Logits and probabilities vs {sit_var}")
-	for i, (data, label) in enumerate(((x[:, :3], 'x'), (M.z[:, :2], 'z = xf - xT + eta'), (M.p[:, :3], 'p'), (M.q[:, :3], 'q = p - ptarget'))):
+	for i, (data, label) in enumerate(((x[:, :3], 'x'), (M.z[:, :2], 'z = xf - xT + eta'), (M.p[:, :3], 'p'), (M.J, 'J'))):
 		ax = axs[np.unravel_index(i, axs.shape)]
 		ax.plot(v, data.detach().cpu().numpy())
 		ax.grid(visible=True)
 		ax.autoscale(axis='x', tight=True)
-		ax.legend([label[0] + sub for sub in ('T', 'F', 'K')[-data.shape[1]:]], loc='best')
+		if label != 'J':
+			ax.legend([label[0] + sub for sub in ('T', 'F', 'K')[-data.shape[1]:]], loc='best')
 		ax.set_title(label)
 	fig.tight_layout()
 
