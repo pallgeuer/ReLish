@@ -231,7 +231,7 @@ class MRRLLoss(ClassificationLoss):
 		super().__init__(num_classes, normed, norm_scale, reduction, eta=eta, cap=cap)
 
 	def loss(self, logits, target):
-		return self.reduce_loss(MRRLFunction.apply(logits, target, self.num_classes, self.norm_scale, self.eta, self.cap))
+		return self.reduce_loss(MRRLFunction.apply(logits, target, self.eta, self.cap))
 
 # Saturated relative raw logit loss
 class SRRLLoss(ClassificationLoss):
@@ -259,18 +259,20 @@ class MSRRLLoss(ClassificationLoss):
 		self.loss_offset = math.sqrt(delta)
 
 	def loss(self, logits, target):
-		return self.reduce_loss(MSRRLFunction.apply(logits, target, self.num_classes, self.norm_scale, self.eta, self.delta, self.loss_offset, self.cap))
+		return self.reduce_loss(MSRRLFunction.apply(logits, target, self.eta, self.delta, self.loss_offset, self.cap))
 
 # Manual exponentially saturated relative raw logit loss
 class MESRRLLoss(ClassificationLoss):
 
-	def __init__(self, num_classes, normed=True, reduction='mean', eta=DEFAULT_ETA, cap=True):
-		norm_scale = (1 - eps) / ((num_classes - 1) / num_classes - eps)
-		beta = (num_classes / (num_classes - 1)) / (norm_scale * eta) ** 2
-		super().__init__(num_classes, normed, norm_scale, reduction, eta=eta, beta=beta, cap=cap)
+	def __init__(self, num_classes, normed=True, reduction='mean', eta=DEFAULT_ETA, tau=DEFAULT_TAU, cap=True):
+		delta = tau * eta * eta * ((num_classes - 1) / num_classes)
+		norm_scale = math.sqrt(tau)
+		super().__init__(num_classes, normed, norm_scale, reduction, eta=eta, tau=tau, delta=delta, cap=cap)
+		self.loss_const_a = 0.5 * math.sqrt(3 * delta)
+		self.loss_const_b = 1 / (delta * math.sqrt(3))
 
 	def loss(self, logits, target):
-		return self.reduce_loss(MESRRLFunction.apply(logits, target, self.num_classes, self.norm_scale, self.eta, self.beta, self.cap))
+		return self.reduce_loss(MESRRLFunction.apply(logits, target, self.eta, self.delta, self.loss_const_a, self.loss_const_b, self.cap))
 
 #
 # Loss maps
@@ -388,7 +390,7 @@ def _get_softmax_dim(name: str, ndim: int) -> int:
 class MRRLFunction(torch.autograd.Function):
 
 	@staticmethod
-	def forward(ctx, logits, target, num_classes, norm_scale, eta, cap):
+	def forward(ctx, logits, target, eta, cap):
 		ctx.set_materialize_grads(False)
 		target = target.unsqueeze(dim=1)
 		logit_terms = logits.sub(logits.gather(dim=1, index=target)).scatter_(dim=1, index=target, value=-eta)
@@ -403,14 +405,14 @@ class MRRLFunction(torch.autograd.Function):
 	@staticmethod
 	@torch.autograd.function.once_differentiable
 	def backward(ctx, grad_loss):
-		return (grad_loss.mul(ctx.saved_tensors[0]) if grad_loss is not None and ctx.needs_input_grad[0] else None), None, None, None, None, None
+		return (grad_loss.mul(ctx.saved_tensors[0]) if grad_loss is not None and ctx.needs_input_grad[0] else None), None, None, None
 
 # Manual saturated relative raw logit loss autograd function
 # noinspection PyMethodOverriding, PyAbstractClass
 class MSRRLFunction(torch.autograd.Function):
 
 	@staticmethod
-	def forward(ctx, logits, target, num_classes, norm_scale, eta, delta, loss_offset, cap):
+	def forward(ctx, logits, target, eta, delta, loss_offset, cap):
 		ctx.set_materialize_grads(False)
 		target = target.unsqueeze(dim=1)
 		logit_terms = logits.sub(logits.gather(dim=1, index=target)).scatter_(dim=1, index=target, value=-eta)
@@ -426,24 +428,24 @@ class MSRRLFunction(torch.autograd.Function):
 	@staticmethod
 	@torch.autograd.function.once_differentiable
 	def backward(ctx, grad_loss):
-		return (grad_loss.mul(ctx.saved_tensors[0]) if grad_loss is not None and ctx.needs_input_grad[0] else None), None, None, None, None, None, None, None
+		return (grad_loss.mul(ctx.saved_tensors[0]) if grad_loss is not None and ctx.needs_input_grad[0] else None), None, None, None, None, None
 
 # Manual exponentially saturated relative raw logit loss autograd function
 # noinspection PyMethodOverriding, PyAbstractClass
 class MESRRLFunction(torch.autograd.Function):
 
 	@staticmethod
-	def forward(ctx, logits, target, num_classes, norm_scale, eta, beta, cap):
+	def forward(ctx, logits, target, eta, delta, const_a, const_b, cap):
 		ctx.set_materialize_grads(False)
 		target = target.unsqueeze(dim=1)
 		logit_terms = logits.sub(logits.gather(dim=1, index=target)).scatter_(dim=1, index=target, value=-eta)
 		if cap:
 			logit_terms.clamp_(min=-eta)
-		logit_terms_sumsq = logit_terms.sum(dim=1, keepdim=True).square_()
-		J = logit_terms.square().sum(dim=1, keepdim=True).sub_(logit_terms_sumsq, alpha=1 / num_classes)
-		grad = logit_terms.mul_(J.mul(beta).tanh_().div_(J).sqrt_()).sub_(logit_terms.mean(dim=1, keepdim=True))
+		grad = logit_terms.sub_(logit_terms.mean(dim=1, keepdim=True))
+		J = grad.square().sum(dim=1, keepdim=True)
+		grad.mul_(J.div(delta).tanh_().div(J).nan_to_num_(nan=1 / delta).sqrt_())
 		ctx.save_for_backward(grad)
-		return grad.square().sum(dim=1, keepdim=True).mul_(norm_scale)
+		return J.mul_(const_b).asinh_().mul_(const_a)
 
 	@staticmethod
 	@torch.autograd.function.once_differentiable
