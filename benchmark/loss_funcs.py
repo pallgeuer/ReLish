@@ -220,8 +220,7 @@ class RRLLoss(ClassificationLoss):
 	def loss(self, logits, target):
 		target = target.unsqueeze(dim=1)
 		logit_terms = logits.scatter_add(dim=1, index=target, src=torch.full_like(target, fill_value=-self.eta, dtype=logits.dtype))
-		logit_terms_sumsq = logit_terms.sum(dim=1, keepdim=True).square_()
-		return self.reduce_loss(logit_terms.square_().sum(dim=1, keepdim=True).sub_(logit_terms_sumsq, alpha=1 / self.num_classes))
+		return self.reduce_loss(logit_terms.sub_(logit_terms.mean(dim=1, keepdim=True)).square_().sum(dim=1, keepdim=True))
 
 # Manual relative raw logit loss
 class MRRLLoss(ClassificationLoss):
@@ -245,8 +244,7 @@ class SRRLLoss(ClassificationLoss):
 	def loss(self, logits, target):
 		target = target.unsqueeze(dim=1)
 		logit_terms = logits.scatter_add(dim=1, index=target, src=torch.full_like(target, fill_value=-self.eta, dtype=logits.dtype))
-		logit_terms_sumsq = logit_terms.sum(dim=1, keepdim=True).square_()
-		J = logit_terms.square_().sum(dim=1, keepdim=True).sub_(logit_terms_sumsq, alpha=1 / self.num_classes)
+		J = logit_terms.sub_(logit_terms.mean(dim=1, keepdim=True)).square_().sum(dim=1, keepdim=True)
 		return self.reduce_loss(J.add_(self.delta).sqrt_().sub(self.loss_offset))
 
 # Manual saturated relative raw logit loss
