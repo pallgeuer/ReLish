@@ -37,9 +37,10 @@ def main():
 	parser.add_argument('--dataset', type=str, default='CIFAR10', metavar='NAME', help='Classification dataset to train on (default: %(default)s)')
 	parser.add_argument('--dataset_path', type=str, default=None, metavar='PATH', help='Classification dataset root path (default: ENV{DATASET_PATH} or ~/Datasets)')
 	parser.add_argument('--dataset_workers', type=int, default=4, metavar='NUM', help='Number of worker processes to use for dataset loading (default: %(default)d)')
-	parser.add_argument('--dataset_details', action='store_true', help='Whether to calculate and show dataset details')
 	parser.add_argument('--no_auto_augment', action='store_true', help='Disable the AutoAugment input data transform (where present)')
 	parser.add_argument('--model', type=str, default='resnet18', metavar='MODEL', help='Classification model (default: %(default)s)')
+	parser.add_argument('--model_saves', type=int, default=0, metavar='NUM', help='Number of best model checkpoints to maintain during training (default: %(default)d)')
+	parser.add_argument('--model_upload', action='store_true', help='Store saved model checkpoints so that they are uploaded to wandb')
 	parser.add_argument('--act_func', type=str, default='original', metavar='NAME', help='Activation function (default: %(default)s)')
 	parser.add_argument('--optimizer', type=str, default='adam', metavar='NAME', help='Optimizer (default: %(default)s)')
 	parser.add_argument('--wd_scale', type=float, default=1.0, metavar='SCALE', help='Weight decay scale relative to the default value')
@@ -59,6 +60,7 @@ def main():
 	parser.add_argument('--dry', action='store_true', help='Show what would be done but do not actually run the training')
 	parser.add_argument('--no_wandb', dest='use_wandb', action='store_false', help='Do not use wandb')
 	parser.add_argument('--model_details', action='store_true', help='Whether to show model details')
+	parser.add_argument('--dataset_details', action='store_true', help='Whether to calculate and show dataset details')
 	args = parser.parse_args()
 
 	if args.dataset_path is None:
@@ -470,6 +472,7 @@ def train_model(C, train_loader, valid_loader, model, criterion, optimizer, sche
 	amp_enabled = C.amp and device.type == 'cuda'
 	scaler = torch.cuda.amp.GradScaler(enabled=amp_enabled)
 	warmup_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1 / (C.warmup_epochs + 1), end_factor=1, total_iters=C.warmup_epochs) if C.warmup_epochs >= 1 else None
+	model_saver = util.ModelCheckpointSaver(num_best=C.model_saves, maximise=True, save_last=False, upload=C.model_upload)
 
 	output_nans = 0
 	batch_nan_worm = util.EventWorm(event_count=C.max_nan_batches)
@@ -603,6 +606,8 @@ def train_model(C, train_loader, valid_loader, model, criterion, optimizer, sche
 
 		print(f"\x1b[2K\rValidated {num_valid_samples} samples in {num_valid_batches} batches in time {util.format_duration(detail_stamp - init_detail_stamp)}")
 		print(f"Validation results: Mean loss {valid_loss:#.4g}, Top-k ({', '.join(f'{topk:.2%}' for topk in reversed(valid_topk))})")
+
+		model_saver.save_model(model, epoch, metric=valid_topk[0])
 
 		if warmup_scheduler:
 			warmup_scheduler.step()
