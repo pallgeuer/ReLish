@@ -5,6 +5,7 @@ import gc
 import math
 import time
 import os.path
+import itertools
 import traceback
 import contextlib
 import collections
@@ -49,7 +50,47 @@ def print_wandb_config(C=None, newline=True):
 # Training util
 #
 
-# Classification inference statistics
+# Gradient accumulator
+# Note: While this accumulates GRADIENTS across multiple batches 'perfectly', it does NOT accumulate the statistics inside e.g. batch norms or similar, if these are present in the model.
+#       As such, it is not necessarily absolutely identical to training with a larger batch size, but if the smaller batch size is still "large enough" the difference might not be measurable.
+class GradAccum:
+
+	def __init__(self, loader, accum_size):
+		self.raw_loader = loader
+		self.loader_batch_size = self.raw_loader.batch_size
+		self.accum_size = max(accum_size, 1)
+		self.drop_last = self.raw_loader.drop_last
+		self.num_batches = len(self.raw_loader)
+		if self.drop_last:
+			self.num_steps = self.num_batches // self.accum_size
+			self.last_full_batch_num = self.accum_size * self.num_steps
+			self.last_accum_samples = None
+			self.num_batches_used = self.last_full_batch_num
+			self.num_samples_used = self.num_batches_used * self.loader_batch_size
+		else:
+			self.num_samples_used = len(self.raw_loader.dataset)
+			self.num_steps = (self.num_batches if self.num_samples_used % self.loader_batch_size == 0 else self.num_batches - 1) // self.accum_size
+			self.last_full_batch_num = self.accum_size * self.num_steps
+			self.last_accum_samples = self.num_samples_used - self.last_full_batch_num * self.loader_batch_size
+			self.num_batches_used = self.num_batches
+			if self.last_accum_samples > 0:
+				self.num_steps += 1
+		self.batch_num = 0
+
+	def loader(self):
+		self.batch_num = 0
+		return itertools.islice(self.raw_loader, self.last_full_batch_num) if self.drop_last else self.raw_loader
+
+	def accum_loss(self, mean_batch_loss, num_in_batch):
+		self.batch_num += 1
+		if self.batch_num <= self.last_full_batch_num:
+			mean_accum_batch_loss = mean_batch_loss / self.accum_size
+		else:
+			mean_accum_batch_loss = mean_batch_loss * (num_in_batch / self.last_accum_samples)
+		optimizer_step = (self.batch_num % self.accum_size == 0 or self.batch_num == self.num_batches)
+		return mean_accum_batch_loss, optimizer_step
+
+# Inference statistics
 class InferenceStats:
 
 	num_samples: int

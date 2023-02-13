@@ -50,6 +50,7 @@ def main():
 	parser.add_argument('--warmup_epochs', type=int, default=0, metavar='NUM', help='Number of linear learning rate warmup epochs (default: %(default)s)')
 	parser.add_argument('--batch_size', type=int, default=64, metavar='SIZE', help='Training batch size (default: %(default)s)')
 	parser.add_argument('--max_batch_size', type=int, default=0, metavar='SIZE', help='Maximum batch size to pass into the model at once (0 = No limit)')
+	parser.add_argument('--no_batch_drop', action='store_true', help='Do not drop the last incomplete batch during training (batches are never dropped during validation)')
 	parser.add_argument('--device', type=str, default='cuda', metavar='DEVICE', help='PyTorch device to run on (default: %(default)s)')
 	parser.add_argument('--no_cudnn_bench', action='store_true', help='Disable cuDNN benchmark mode to save memory over speed')
 	parser.add_argument('--amp', action='store_true', help='Enable automatic mixed precision training')
@@ -107,7 +108,7 @@ def main():
 			util.wait_if_paused(pause_files, device)
 			print()
 
-		train_loader, valid_loader, num_classes, in_shape, num_batch_accum = load_dataset(C, device, details=args.dataset_details)
+		train_loader, valid_loader, num_classes, in_shape, accum_size = load_dataset(C, device, details=args.dataset_details)
 		model = load_model(C, num_classes, in_shape, device, details=args.model_details)
 		criterion = load_criterion(C, num_classes, device, details=args.model_details)
 		optimizer = load_optimizer(C, model.parameters())
@@ -116,7 +117,7 @@ def main():
 		if args.dry:
 			print("Dry run => Would have trained model...")
 		else:
-			train_model(C, device, train_loader, valid_loader, model, criterion, optimizer, scheduler, num_batch_accum, pause_files)
+			train_model(C, device, train_loader, valid_loader, model, criterion, optimizer, scheduler, accum_size, pause_files)
 
 	print()
 
@@ -238,20 +239,20 @@ def load_dataset(C, device, details=False):
 		raise ValueError(f"Invalid dataset specification: {C.dataset}")
 
 	if C.batch_size > C.max_batch_size > 0:
-		for num_batch_accum in range(math.ceil(C.batch_size / C.max_batch_size), C.batch_size // 2 + 1):
-			if C.batch_size % num_batch_accum == 0:
-				model_batch_size = C.batch_size // num_batch_accum
+		for accum_size in range(math.ceil(C.batch_size / C.max_batch_size), C.batch_size // 2 + 1):
+			if C.batch_size % accum_size == 0:
+				model_batch_size = C.batch_size // accum_size
 				break
 		else:
 			model_batch_size = 1
-			num_batch_accum = C.batch_size
+			accum_size = C.batch_size
 	else:
 		model_batch_size = C.batch_size
-		num_batch_accum = 1
+		accum_size = 1
 
 	dataset_workers = min(C.dataset_workers, model_batch_size)
 	pin_memory = (device.type == 'cuda')
-	train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=model_batch_size, num_workers=dataset_workers, shuffle=True, pin_memory=pin_memory, drop_last=False)
+	train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=model_batch_size, num_workers=dataset_workers, shuffle=True, pin_memory=pin_memory, drop_last=not C.no_batch_drop)
 	valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=model_batch_size, num_workers=dataset_workers, shuffle=False, pin_memory=pin_memory, drop_last=False)
 
 	if details:
@@ -266,7 +267,7 @@ def load_dataset(C, device, details=False):
 		print()
 		show_dataset_details(*calc_dataset_details(train_loader), name='Training dataset')
 
-	return train_loader, valid_loader, num_classes, in_shape, num_batch_accum
+	return train_loader, valid_loader, num_classes, in_shape, accum_size
 
 # Calculate details of a dataset
 def calc_dataset_details(loader):
@@ -464,11 +465,12 @@ def load_scheduler(C, optimizer):
 		raise ValueError(f"Invalid learning rate scheduler specification: {C.scheduler}")
 
 # Train the model
-def train_model(C, device, train_loader, valid_loader, model, criterion, optimizer, scheduler, num_batch_accum, pause_files):
+def train_model(C, device, train_loader, valid_loader, model, criterion, optimizer, scheduler, accum_size, pause_files):
 
 	cpu_device = torch.device('cpu')
 	amp_enabled = C.amp and device.type == 'cuda'
 	scaler = torch.cuda.amp.GradScaler(enabled=amp_enabled)
+	grad_accum = util.GradAccum(train_loader, accum_size=accum_size)
 	warmup_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1 / (C.warmup_epochs + 1), end_factor=1, total_iters=C.warmup_epochs) if C.warmup_epochs >= 1 else None
 	model_saver = util.ModelCheckpointSaver(num_best=C.model_saves, maximise=True, save_last=False, upload=C.model_upload)
 	nan_monitor = util.NaNMonitor(max_batches=C.max_nan_batches, max_epochs=C.max_nan_epochs)
@@ -478,7 +480,7 @@ def train_model(C, device, train_loader, valid_loader, model, criterion, optimiz
 	wandb.log(dict(
 		hostname=os.uname().nodename,
 		gpu=re.sub(r'(nvidia|geforce) ', '', torch.cuda.get_device_name(device) if device.type == 'cuda' else str(device), flags=re.IGNORECASE),
-		num_batch_accum=num_batch_accum,
+		accum_size=grad_accum.accum_size,
 		epoch=0,
 		params=sum(p.numel() for p in model.parameters()),
 		params_grad=sum(p.numel() for p in model.parameters() if p.requires_grad),
@@ -498,16 +500,10 @@ def train_model(C, device, train_loader, valid_loader, model, criterion, optimiz
 		model.train()
 		train_stats.start_pass()
 		optimizer.zero_grad(set_to_none=True)
-		num_train_batches = len(train_loader)
 		init_detail_stamp = timeit.default_timer()
 		last_detail_stamp = -math.inf
 
-		# TODO: REFACTOR
-		num_train_steps = 0
-		num_train_accum_full = num_batch_accum * ((num_train_batches - 1) // num_batch_accum)
-		num_train_accum_samples_last = len(train_loader.dataset) - num_train_accum_full * train_loader.batch_size
-
-		for batch_num, (data, target_cpu) in enumerate(train_loader, 1):
+		for data, target_cpu in grad_accum.loader():
 
 			num_in_batch = data.shape[0]
 			data = data.to(device, non_blocking=True)
@@ -516,14 +512,13 @@ def train_model(C, device, train_loader, valid_loader, model, criterion, optimiz
 			with torch.autocast(device_type=device.type, enabled=amp_enabled):
 				output = model(data)
 				mean_batch_loss = criterion(output, target)
-				mean_accum_batch_loss = mean_batch_loss / num_batch_accum if batch_num <= num_train_accum_full else mean_batch_loss * (num_in_batch / num_train_accum_samples_last)
+				mean_accum_batch_loss, optimizer_step = grad_accum.accum_loss(mean_batch_loss, num_in_batch)
 			scaler.scale(mean_accum_batch_loss).backward()
 
-			if batch_num % num_batch_accum == 0 or batch_num == num_train_batches:
+			if optimizer_step:
 				scaler.step(optimizer)
 				scaler.update()
 				optimizer.zero_grad(set_to_none=True)
-				num_train_steps += 1
 
 			output_cpu = output.detach().to(device=cpu_device, dtype=float)
 			train_stats.update_batch(num_in_batch, output_cpu, target_cpu, mean_batch_loss.item())
@@ -532,14 +527,14 @@ def train_model(C, device, train_loader, valid_loader, model, criterion, optimiz
 			detail_stamp = timeit.default_timer()
 			if detail_stamp - last_detail_stamp >= 2.0:
 				last_detail_stamp = detail_stamp
-				print(f"\x1b[2K\r --> [{util.format_duration(detail_stamp - init_detail_stamp)}] Trained {batch_num / num_train_batches:.1%}: Mean loss {train_stats.loss:#.4g}, Top-k ({', '.join(f'{topk:.2%}' for topk in reversed(train_stats.topk))})", end='')
+				print(f"\x1b[2K\r --> [{util.format_duration(detail_stamp - init_detail_stamp)}] Trained {grad_accum.batch_num / grad_accum.num_batches_used:.1%}: Mean loss {train_stats.loss:#.4g}, Top-k ({', '.join(f'{topk:.2%}' for topk in reversed(train_stats.topk))})", end='')
 
 		train_stats.update_pass()
 		log.update(train_loss=train_stats.loss, min_train_loss=train_stats.loss_min)
 		for k, topk in enumerate(train_stats.topk, 1):
 			log[f'train_top{k}'] = topk
 
-		print(f"\x1b[2K\rTrained {train_stats.num_samples} samples in {num_train_steps} steps and {num_train_batches} batches in time {util.format_duration(detail_stamp - init_detail_stamp)}")
+		print(f"\x1b[2K\rTrained {grad_accum.num_samples_used} samples in {grad_accum.num_steps} steps and {grad_accum.num_batches_used} batches in time {util.format_duration(detail_stamp - init_detail_stamp)}")
 		print(f"Training results: Mean loss {train_stats.loss:#.4g}, Top-k ({', '.join(f'{topk:.2%}' for topk in reversed(train_stats.topk))})")
 
 		model.eval()
