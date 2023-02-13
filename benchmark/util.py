@@ -1,6 +1,7 @@
 # Utilities
 
 # Imports
+import math
 import os.path
 import traceback
 import contextlib
@@ -45,6 +46,35 @@ def print_wandb_config(C=None, newline=True):
 #
 # Training util
 #
+
+# NaN monitor
+class NaNMonitor:
+
+	def __init__(self, max_batches, max_epochs):
+		self.nans = 0
+		self.batch_nan_worm = EventWorm(event_count=max_batches)
+		self.epoch_nan_worm = EventWorm(event_count=max_epochs)
+
+	def update_batch(self, batch_output):
+		batch_output_nans = torch.count_nonzero(batch_output.isnan()).item()
+		self.batch_nan_worm.update(batch_output_nans > 0)
+		self.nans += batch_output_nans
+
+	def update_epoch(self, train_loss, valid_loss):
+		self.epoch_nan_worm.update(math.isnan(train_loss) or math.isnan(valid_loss))
+		return self.excessive_nans()
+
+	def excessive_nans(self):
+		return self.epoch_nan_worm.had_event() or self.batch_nan_worm.had_event()
+
+	def nan_count(self):
+		return self.nans
+
+	def batch_worm_count(self):
+		return self.batch_nan_worm.count
+
+	def epoch_worm_count(self):
+		return self.epoch_nan_worm.count
 
 # Model checkpoint saver
 class ModelCheckpointSaver:

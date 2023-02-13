@@ -473,10 +473,7 @@ def train_model(C, train_loader, valid_loader, model, criterion, optimizer, sche
 	scaler = torch.cuda.amp.GradScaler(enabled=amp_enabled)
 	warmup_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1 / (C.warmup_epochs + 1), end_factor=1, total_iters=C.warmup_epochs) if C.warmup_epochs >= 1 else None
 	model_saver = util.ModelCheckpointSaver(num_best=C.model_saves, maximise=True, save_last=False, upload=C.model_upload)
-
-	output_nans = 0
-	batch_nan_worm = util.EventWorm(event_count=C.max_nan_batches)
-	epoch_nan_worm = util.EventWorm(event_count=C.max_nan_epochs)
+	nan_monitor = util.NaNMonitor(max_batches=C.max_nan_batchs, max_epochs=C.max_nan_epochs)
 	min_train_loss = math.inf
 	min_valid_loss = math.inf
 
@@ -487,7 +484,7 @@ def train_model(C, train_loader, valid_loader, model, criterion, optimizer, sche
 		epoch=0,
 		params=sum(p.numel() for p in model.parameters()),
 		params_grad=sum(p.numel() for p in model.parameters() if p.requires_grad),
-		output_nans=output_nans,
+		output_nans=nan_monitor.nan_count(),
 	))
 
 	init_epoch_stamp = epoch_stamp = timeit.default_timer()
@@ -532,9 +529,7 @@ def train_model(C, train_loader, valid_loader, model, criterion, optimizer, sche
 
 			num_train_samples += num_in_batch
 			output_cpu = output.detach().to(device=cpu_device, dtype=float)
-			batch_output_nans = torch.count_nonzero(output_cpu.isnan()).item()
-			batch_nan_worm.update(batch_output_nans > 0)
-			output_nans += batch_output_nans
+			nan_monitor.update_batch(output_cpu)
 			batch_topk_sum = calc_topk_sum(output_cpu, target_cpu, topn=5)
 			for k in range(5):
 				train_topk[k] += batch_topk_sum[k]
@@ -579,9 +574,7 @@ def train_model(C, train_loader, valid_loader, model, criterion, optimizer, sche
 
 				num_valid_samples += num_in_batch
 				output_cpu = output.detach().to(device=cpu_device, dtype=float)
-				batch_output_nans = torch.count_nonzero(output_cpu.isnan()).item()
-				batch_nan_worm.update(batch_output_nans > 0)
-				output_nans += batch_output_nans
+				nan_monitor.update_batch(output_cpu)
 				batch_topk_sum = calc_topk_sum(output_cpu, target_cpu, topn=5)
 				for k in range(5):
 					valid_topk[k] += batch_topk_sum[k]
@@ -619,12 +612,11 @@ def train_model(C, train_loader, valid_loader, model, criterion, optimizer, sche
 		log.update(epoch_time=epoch_time)
 		epoch_stamp = end_stamp
 
-		log.update(output_nans=output_nans)
+		log.update(output_nans=nan_monitor.nan_count())
 		wandb.log(log)
 
-		epoch_nan_worm.update(math.isnan(train_loss) or math.isnan(valid_loss))
-		if epoch_nan_worm.had_event() or batch_nan_worm.had_event():
-			print(f"Aborting training run due to excessive NaNs ({epoch_nan_worm.count} worm epochs, {batch_nan_worm.count} worm batches)")
+		if nan_monitor.update_epoch(train_loss, valid_loss):
+			print(f"Aborting training run due to excessive NaNs ({nan_monitor.epoch_worm_count()} worm epochs, {nan_monitor.batch_worm_count()} worm batches)")
 			break
 
 # Calculate summed topk accuracies for a batch
