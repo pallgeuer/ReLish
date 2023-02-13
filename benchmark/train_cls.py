@@ -6,7 +6,6 @@ import os
 import re
 import sys
 import math
-import time
 import timeit
 import argparse
 import functools
@@ -89,6 +88,11 @@ def main():
 		if args.use_wandb:
 			print()
 
+		C = wandb.config
+		util.print_wandb_config(C)
+		device = torch.device(C.device)
+		torch.backends.cudnn.benchmark = not C.no_cudnn_bench
+
 		pause_dir = wandb.run.dir or '/tmp'
 		pause_files = []
 		for _ in range(3):
@@ -100,28 +104,24 @@ def main():
 			print("Monitoring for pause files:")
 			for pause_file in pause_files:
 				print(f"  {pause_file}")
-			wait_if_paused(pause_files)
+			util.wait_if_paused(pause_files, device)
 			print()
 
-		C = wandb.config
-		util.print_wandb_config(C)
-		torch.backends.cudnn.benchmark = not C.no_cudnn_bench
-
-		train_loader, valid_loader, num_classes, in_shape, num_batch_accum = load_dataset(C, details=args.dataset_details)
-		model = load_model(C, num_classes, in_shape, details=args.model_details)
-		criterion = load_criterion(C, num_classes, details=args.model_details)
+		train_loader, valid_loader, num_classes, in_shape, num_batch_accum = load_dataset(C, device, details=args.dataset_details)
+		model = load_model(C, num_classes, in_shape, device, details=args.model_details)
+		criterion = load_criterion(C, num_classes, device, details=args.model_details)
 		optimizer = load_optimizer(C, model.parameters())
 		scheduler = load_scheduler(C, optimizer)
 
 		if args.dry:
 			print("Dry run => Would have trained model...")
 		else:
-			train_model(C, train_loader, valid_loader, model, criterion, optimizer, scheduler, num_batch_accum, pause_files)
+			train_model(C, device, train_loader, valid_loader, model, criterion, optimizer, scheduler, num_batch_accum, pause_files)
 
 	print()
 
 # Load the dataset
-def load_dataset(C, details=False):
+def load_dataset(C, device, details=False):
 
 	tfrm_normalize_rgb = transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
 
@@ -250,7 +250,7 @@ def load_dataset(C, details=False):
 		num_batch_accum = 1
 
 	dataset_workers = min(C.dataset_workers, model_batch_size)
-	pin_memory = torch.device(C.device).type == 'cuda'
+	pin_memory = (device.type == 'cuda')
 	train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=model_batch_size, num_workers=dataset_workers, shuffle=True, pin_memory=pin_memory, drop_last=False)
 	valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=model_batch_size, num_workers=dataset_workers, shuffle=False, pin_memory=pin_memory, drop_last=False)
 
@@ -294,7 +294,7 @@ def show_dataset_details(num_samples, num_batches, num_classes, class_counts, da
 	print()
 
 # Load the model
-def load_model(C, num_classes, in_shape, details=False):
+def load_model(C, num_classes, in_shape, device, details=False):
 
 	model_type, _, model_variant = C.model.partition('-')
 	parse_model_variant = functools.partial(util.parse_value, string=model_variant, error='Invalid model variant')
@@ -419,12 +419,12 @@ def load_model(C, num_classes, in_shape, details=False):
 		print()
 
 	wandb.watch(model)
-	model.to(device=C.device)
+	model.to(device=device)
 
 	return model
 
 # Load the criterion
-def load_criterion(C, num_classes, details=False):
+def load_criterion(C, num_classes, device, details=False):
 
 	if C.loss == 'nllloss':
 		criterion = nn.CrossEntropyLoss(reduction='mean')
@@ -433,7 +433,7 @@ def load_criterion(C, num_classes, details=False):
 	if not criterion:
 		raise ValueError(f"Invalid criterion/loss specification: {C.loss}")
 
-	criterion.to(device=C.device)
+	criterion.to(device=device)
 
 	if details:
 		print(f"Criterion: {criterion}")
@@ -464,18 +464,16 @@ def load_scheduler(C, optimizer):
 		raise ValueError(f"Invalid learning rate scheduler specification: {C.scheduler}")
 
 # Train the model
-def train_model(C, train_loader, valid_loader, model, criterion, optimizer, scheduler, num_batch_accum, pause_files):
+def train_model(C, device, train_loader, valid_loader, model, criterion, optimizer, scheduler, num_batch_accum, pause_files):
 
-	valid_topk_max = [0] * 5
-	device = torch.device(C.device)
 	cpu_device = torch.device('cpu')
 	amp_enabled = C.amp and device.type == 'cuda'
 	scaler = torch.cuda.amp.GradScaler(enabled=amp_enabled)
 	warmup_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1 / (C.warmup_epochs + 1), end_factor=1, total_iters=C.warmup_epochs) if C.warmup_epochs >= 1 else None
 	model_saver = util.ModelCheckpointSaver(num_best=C.model_saves, maximise=True, save_last=False, upload=C.model_upload)
-	nan_monitor = util.NaNMonitor(max_batches=C.max_nan_batchs, max_epochs=C.max_nan_epochs)
-	min_train_loss = math.inf
-	min_valid_loss = math.inf
+	nan_monitor = util.NaNMonitor(max_batches=C.max_nan_batches, max_epochs=C.max_nan_epochs)
+	train_stats = util.InferenceStats()
+	valid_stats = util.InferenceStats()
 
 	wandb.log(dict(
 		hostname=os.uname().nodename,
@@ -490,7 +488,7 @@ def train_model(C, train_loader, valid_loader, model, criterion, optimizer, sche
 	init_epoch_stamp = epoch_stamp = timeit.default_timer()
 	for epoch in range(1, C.epochs + 1):
 
-		wait_if_paused(pause_files)
+		util.wait_if_paused(pause_files, device)
 
 		print('-' * 80)
 		lr = optimizer.param_groups[0]['lr']
@@ -498,17 +496,17 @@ def train_model(C, train_loader, valid_loader, model, criterion, optimizer, sche
 		log = dict(epoch=epoch, lr=lr)
 
 		model.train()
-
-		num_train_steps = 0
+		train_stats.start_pass()
+		optimizer.zero_grad(set_to_none=True)
 		num_train_batches = len(train_loader)
-		num_train_samples = 0
+		init_detail_stamp = timeit.default_timer()
+		last_detail_stamp = -math.inf
+
+		# TODO: REFACTOR
+		num_train_steps = 0
 		num_train_accum_full = num_batch_accum * ((num_train_batches - 1) // num_batch_accum)
 		num_train_accum_samples_last = len(train_loader.dataset) - num_train_accum_full * train_loader.batch_size
-		train_loss = 0
-		train_topk = [0] * 5
-		init_detail_stamp = last_detail_stamp = timeit.default_timer()
 
-		optimizer.zero_grad(set_to_none=True)
 		for batch_num, (data, target_cpu) in enumerate(train_loader, 1):
 
 			num_in_batch = data.shape[0]
@@ -527,42 +525,31 @@ def train_model(C, train_loader, valid_loader, model, criterion, optimizer, sche
 				optimizer.zero_grad(set_to_none=True)
 				num_train_steps += 1
 
-			num_train_samples += num_in_batch
 			output_cpu = output.detach().to(device=cpu_device, dtype=float)
+			train_stats.update_batch(num_in_batch, output_cpu, target_cpu, mean_batch_loss.item())
 			nan_monitor.update_batch(output_cpu)
-			batch_topk_sum = calc_topk_sum(output_cpu, target_cpu, topn=5)
-			for k in range(5):
-				train_topk[k] += batch_topk_sum[k]
-			train_loss += mean_batch_loss.item() * num_in_batch
 
 			detail_stamp = timeit.default_timer()
 			if detail_stamp - last_detail_stamp >= 2.0:
 				last_detail_stamp = detail_stamp
-				print(f"\x1b[2K\r --> [{util.format_duration(detail_stamp - init_detail_stamp)}] Trained {batch_num / num_train_batches:.1%}: Mean loss {train_loss / num_train_samples:#.4g}, Top-k ({', '.join(f'{topk / num_train_samples:.2%}' for topk in reversed(train_topk))})", end='')
+				print(f"\x1b[2K\r --> [{util.format_duration(detail_stamp - init_detail_stamp)}] Trained {batch_num / num_train_batches:.1%}: Mean loss {train_stats.loss:#.4g}, Top-k ({', '.join(f'{topk:.2%}' for topk in reversed(train_stats.topk))})", end='')
 
-		train_loss /= num_train_samples
-		if train_loss < min_train_loss or math.isnan(train_loss):
-			min_train_loss = train_loss
-		for k in range(5):
-			train_topk[k] /= num_train_samples
+		train_stats.update_pass()
+		log.update(train_loss=train_stats.loss, min_train_loss=train_stats.loss_min)
+		for k, topk in enumerate(train_stats.topk, 1):
+			log[f'train_top{k}'] = topk
 
-		log.update(train_loss=train_loss, min_train_loss=min_train_loss)
-		for k in range(5):
-			log[f'train_top{k + 1}'] = train_topk[k]
-
-		print(f"\x1b[2K\rTrained {num_train_samples} samples in {num_train_steps} steps and {num_train_batches} batches in time {util.format_duration(detail_stamp - init_detail_stamp)}")
-		print(f"Training results: Mean loss {train_loss:#.4g}, Top-k ({', '.join(f'{topk:.2%}' for topk in reversed(train_topk))})")
+		print(f"\x1b[2K\rTrained {train_stats.num_samples} samples in {num_train_steps} steps and {num_train_batches} batches in time {util.format_duration(detail_stamp - init_detail_stamp)}")
+		print(f"Training results: Mean loss {train_stats.loss:#.4g}, Top-k ({', '.join(f'{topk:.2%}' for topk in reversed(train_stats.topk))})")
 
 		model.eval()
-
+		valid_stats.start_pass()
 		num_valid_batches = len(valid_loader)
-		num_valid_samples = 0
-		valid_loss = 0
-		valid_topk = [0] * 5
-		init_detail_stamp = last_detail_stamp = timeit.default_timer()
+		init_detail_stamp = timeit.default_timer()
+		last_detail_stamp = -math.inf
 
 		with torch.inference_mode():
-			for batch_num, (data, target_cpu) in enumerate(valid_loader):
+			for batch_num, (data, target_cpu) in enumerate(valid_loader, 1):
 
 				num_in_batch = data.shape[0]
 				data = data.to(device, non_blocking=True)
@@ -572,35 +559,25 @@ def train_model(C, train_loader, valid_loader, model, criterion, optimizer, sche
 					output = model(data)
 					mean_batch_loss = criterion(output, target)
 
-				num_valid_samples += num_in_batch
 				output_cpu = output.detach().to(device=cpu_device, dtype=float)
+				valid_stats.update_batch(num_in_batch, output_cpu, target_cpu, mean_batch_loss.item())
 				nan_monitor.update_batch(output_cpu)
-				batch_topk_sum = calc_topk_sum(output_cpu, target_cpu, topn=5)
-				for k in range(5):
-					valid_topk[k] += batch_topk_sum[k]
-				valid_loss += mean_batch_loss.item() * num_in_batch
 
 				detail_stamp = timeit.default_timer()
 				if detail_stamp - last_detail_stamp >= 2.0:
 					last_detail_stamp = detail_stamp
-					print(f"\x1b[2K\r --> [{util.format_duration(detail_stamp - init_detail_stamp)}] Validated {(batch_num + 1) / num_valid_batches:.1%}: Mean loss {valid_loss / num_valid_samples:#.4g}, Top-k ({', '.join(f'{topk / num_valid_samples:.2%}' for topk in reversed(valid_topk))})", end='')
+					print(f"\x1b[2K\r --> [{util.format_duration(detail_stamp - init_detail_stamp)}] Validated {batch_num / num_valid_batches:.1%}: Mean loss {valid_stats.loss:#.4g}, Top-k ({', '.join(f'{topk:.2%}' for topk in reversed(valid_stats.topk))})", end='')
 
-		valid_loss /= num_valid_samples
-		if valid_loss < min_valid_loss or math.isnan(valid_loss):
-			min_valid_loss = valid_loss
-		for k in range(5):
-			valid_topk[k] /= num_valid_samples
-			valid_topk_max[k] = max(valid_topk_max[k], valid_topk[k])
+		valid_stats.update_pass()
+		log.update(valid_loss=valid_stats.loss, min_valid_loss=valid_stats.loss_min)
+		for k, (topk, topk_max) in enumerate(zip(valid_stats.topk, valid_stats.topk_max), 1):
+			log[f'valid_top{k}'] = topk
+			log[f'valid_top{k}_max'] = topk_max
 
-		log.update(valid_loss=valid_loss, min_valid_loss=min_valid_loss)
-		for k in range(5):
-			log[f'valid_top{k + 1}'] = valid_topk[k]
-			log[f'valid_top{k + 1}_max'] = valid_topk_max[k]
+		print(f"\x1b[2K\rValidated {valid_stats.num_samples} samples in {num_valid_batches} batches in time {util.format_duration(detail_stamp - init_detail_stamp)}")
+		print(f"Validation results: Mean loss {valid_stats.loss:#.4g}, Top-k ({', '.join(f'{topk:.2%}' for topk in reversed(valid_stats.topk))})")
 
-		print(f"\x1b[2K\rValidated {num_valid_samples} samples in {num_valid_batches} batches in time {util.format_duration(detail_stamp - init_detail_stamp)}")
-		print(f"Validation results: Mean loss {valid_loss:#.4g}, Top-k ({', '.join(f'{topk:.2%}' for topk in reversed(valid_topk))})")
-
-		model_saver.save_model(model, epoch, metric=valid_topk[0])
+		model_saver.save_model(model, epoch, metric=valid_stats.topk[0])
 
 		if warmup_scheduler:
 			warmup_scheduler.step()
@@ -615,30 +592,9 @@ def train_model(C, train_loader, valid_loader, model, criterion, optimizer, sche
 		log.update(output_nans=nan_monitor.nan_count())
 		wandb.log(log)
 
-		if nan_monitor.update_epoch(train_loss, valid_loss):
+		if nan_monitor.update_epoch(train_stats.loss, valid_stats.loss):
 			print(f"Aborting training run due to excessive NaNs ({nan_monitor.epoch_worm_count()} worm epochs, {nan_monitor.batch_worm_count()} worm batches)")
 			break
-
-# Calculate summed topk accuracies for a batch
-def calc_topk_sum(output, target, topn=5):
-	# output = BxC tensor of floats where larger score means higher predicted probability of class
-	# target = B tensor of correct class indices
-	num_classes = output.shape[1]
-	top_indices = output.topk(min(topn, num_classes), dim=1, largest=True, sorted=True).indices
-	topk_tensor = torch.unsqueeze(target, dim=1).eq(top_indices).cumsum(dim=1).sum(dim=0, dtype=float)
-	topk_tuple = tuple(topk.item() for topk in topk_tensor)
-	return topk_tuple if num_classes >= topn else topk_tuple + ((topk_tuple[-1],) * (topn - num_classes))
-
-# Wait around if paused
-def wait_if_paused(pause_files):
-	paused = False
-	while any(os.path.exists(pause_file) for pause_file in pause_files):
-		if not paused:
-			print(f"{'*' * 35}  PAUSED  {'*' * 35}")
-			paused = True
-		time.sleep(3)
-	if paused:
-		print(f"{'*' * 34}  UNPAUSED  {'*' * 34}")
 
 # Run main function
 if __name__ == "__main__":

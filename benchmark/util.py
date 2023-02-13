@@ -1,7 +1,9 @@
 # Utilities
 
 # Imports
+import gc
 import math
+import time
 import os.path
 import traceback
 import contextlib
@@ -47,34 +49,53 @@ def print_wandb_config(C=None, newline=True):
 # Training util
 #
 
-# NaN monitor
-class NaNMonitor:
+# Classification inference statistics
+class InferenceStats:
 
-	def __init__(self, max_batches, max_epochs):
-		self.nans = 0
-		self.batch_nan_worm = EventWorm(event_count=max_batches)
-		self.epoch_nan_worm = EventWorm(event_count=max_epochs)
+	num_samples: int
+	loss: float
+	loss_min: float
+	loss_sum: float
+	topk: list[float, ...]  # Format: [Top-1, Top-2, ...]
+	topk_max: list[float, ...]
+	topk_sum: list[float, ...]
 
-	def update_batch(self, batch_output):
-		batch_output_nans = torch.count_nonzero(batch_output.isnan()).item()
-		self.batch_nan_worm.update(batch_output_nans > 0)
-		self.nans += batch_output_nans
+	def __init__(self, num_topk=5):
+		self.num_topk = num_topk
+		self.start_pass()
+		self.loss_min = math.inf
+		self.topk_max = [-math.inf] * self.num_topk
 
-	def update_epoch(self, train_loss, valid_loss):
-		self.epoch_nan_worm.update(math.isnan(train_loss) or math.isnan(valid_loss))
-		return self.excessive_nans()
+	def start_pass(self):
+		self.num_samples = 0
+		self.loss = math.nan
+		self.loss_sum = 0
+		self.topk = [math.nan] * self.num_topk
+		self.topk_sum = [0] * self.num_topk
 
-	def excessive_nans(self):
-		return self.epoch_nan_worm.had_event() or self.batch_nan_worm.had_event()
+	def update_batch(self, num_in_batch, output, target, mean_batch_loss):
+		# Note: Make sure to pass output/target as detached CPU tensors, and mean_batch_loss as a float (non-tensor) item()
+		self.num_samples += num_in_batch
+		self.loss_sum += mean_batch_loss * num_in_batch
+		self.loss = self.loss_sum / self.num_samples
+		batch_topk_sum = self.calc_topk_sum(output, target)
+		for k in range(self.num_topk):
+			self.topk_sum[k] += batch_topk_sum[k]
+			self.topk[k] = self.topk_sum[k] / self.num_samples
 
-	def nan_count(self):
-		return self.nans
+	def update_pass(self):
+		assert isinstance(self.loss, float)
+		if self.loss < self.loss_min or math.isnan(self.loss):
+			self.loss_min = self.loss
+		for k in range(self.num_topk):
+			self.topk_max[k] = max(self.topk_max[k], self.topk[k])
 
-	def batch_worm_count(self):
-		return self.batch_nan_worm.count
-
-	def epoch_worm_count(self):
-		return self.epoch_nan_worm.count
+	def calc_topk_sum(self, output, target):
+		num_classes = output.shape[1]
+		top_indices = output.topk(min(self.num_topk, num_classes), dim=1, largest=True, sorted=True).indices
+		topk_tensor = torch.unsqueeze(target, dim=1).eq(top_indices).cumsum(dim=1).sum(dim=0, dtype=float)
+		topk_tuple = tuple(topk.item() for topk in topk_tensor)
+		return topk_tuple if num_classes >= self.num_topk else topk_tuple + ((topk_tuple[-1],) * (self.num_topk - num_classes))
 
 # Model checkpoint saver
 class ModelCheckpointSaver:
@@ -115,6 +136,52 @@ class ModelCheckpointSaver:
 			if len(self.best_model_paths) == self.best_model_paths.maxlen:
 				os.remove(self.best_model_paths[0])
 			self.best_model_paths.append(best_model_path)
+
+# NaN monitor
+class NaNMonitor:
+
+	def __init__(self, max_batches, max_epochs):
+		self.nans = 0
+		self.batch_nan_worm = EventWorm(event_count=max_batches)
+		self.epoch_nan_worm = EventWorm(event_count=max_epochs)
+
+	def update_batch(self, batch_output):
+		batch_output_nans = torch.count_nonzero(batch_output.isnan()).item()
+		self.batch_nan_worm.update(batch_output_nans > 0)
+		self.nans += batch_output_nans
+
+	def update_epoch(self, train_loss, valid_loss):
+		self.epoch_nan_worm.update(math.isnan(train_loss) or math.isnan(valid_loss))
+		return self.excessive_nans()
+
+	def excessive_nans(self):
+		return self.epoch_nan_worm.had_event() or self.batch_nan_worm.had_event()
+
+	def nan_count(self):
+		return self.nans
+
+	def batch_worm_count(self):
+		return self.batch_nan_worm.count
+
+	def epoch_worm_count(self):
+		return self.epoch_nan_worm.count
+
+# Wait around if paused
+def wait_if_paused(pause_files, device):
+	paused = False
+	while any(os.path.exists(pause_file) for pause_file in pause_files):
+		if not paused:
+			if torch.cuda.is_initialized() and device.type == 'cuda':
+				torch.cuda.synchronize(device)
+			gc.collect()
+			if torch.cuda.is_initialized():
+				torch.cuda.ipc_collect()
+				torch.cuda.empty_cache()
+			print(f"{'*' * 35}  PAUSED  {'*' * 35}")
+			paused = True
+		time.sleep(3)
+	if paused:
+		print(f"{'*' * 34}  UNPAUSED  {'*' * 34}")
 
 #
 # Misc util
