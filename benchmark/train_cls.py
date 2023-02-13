@@ -57,6 +57,7 @@ def main():
 	parser.add_argument('--aaa', type=int, default=1, metavar='NUM', help='Dummy variable that allows sweeps to do multiple passes of grid searches')
 	parser.add_argument('--max_nan_batches', type=int, default=3000, metavar='NUM', help='Abort training if this many batches have a NaN output (as judged by a worm)')
 	parser.add_argument('--max_nan_epochs', type=int, default=4, metavar='NUM', help='Abort training if this many epochs have a NaN training or validation loss (as judged by a worm)')
+	parser.add_argument('--logit_stats', action='store_true', help='Calculate and log logit statistics')
 	parser.add_argument('--dry', action='store_true', help='Show what would be done but do not actually run the training')
 	parser.add_argument('--no_wandb', dest='use_wandb', action='store_false', help='Do not use wandb')
 	parser.add_argument('--model_details', action='store_true', help='Whether to show model details')
@@ -474,6 +475,8 @@ def train_model(C, device, train_loader, valid_loader, model, criterion, optimiz
 	warmup_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1 / (C.warmup_epochs + 1), end_factor=1, total_iters=C.warmup_epochs) if C.warmup_epochs >= 1 else None
 	model_saver = util.ModelCheckpointSaver(num_best=C.model_saves, maximise=True, save_last=False, upload=C.model_upload)
 	nan_monitor = util.NaNMonitor(max_batches=C.max_nan_batches, max_epochs=C.max_nan_epochs)
+	train_logit_stats = util.LogitDistStats(num_samples=grad_accum.num_samples_used, enabled=C.logit_stats)
+	valid_logit_stats = util.LogitDistStats(num_samples=len(valid_loader.dataset), enabled=C.logit_stats)
 	train_stats = util.InferenceStats()
 	valid_stats = util.InferenceStats()
 
@@ -498,7 +501,8 @@ def train_model(C, device, train_loader, valid_loader, model, criterion, optimiz
 		log = dict(epoch=epoch, lr=lr)
 
 		model.train()
-		train_stats.start_pass()
+		train_stats.start_epoch()
+		train_logit_stats.start_epoch()
 		optimizer.zero_grad(set_to_none=True)
 		init_detail_stamp = timeit.default_timer()
 		last_detail_stamp = -math.inf
@@ -520,16 +524,19 @@ def train_model(C, device, train_loader, valid_loader, model, criterion, optimiz
 				scaler.update()
 				optimizer.zero_grad(set_to_none=True)
 
-			output_cpu = output.detach().to(device=cpu_device, dtype=float)
-			train_stats.update_batch(num_in_batch, output_cpu, target_cpu, mean_batch_loss.item())
+			output_detach = output.detach()
+			train_logit_stats.update(output_detach)
+			output_cpu = output_detach.to(device=cpu_device, dtype=float)
 			nan_monitor.update_batch(output_cpu)
+			train_stats.update(num_in_batch, output_cpu, target_cpu, mean_batch_loss.item())
 
 			detail_stamp = timeit.default_timer()
 			if detail_stamp - last_detail_stamp >= 2.0:
 				last_detail_stamp = detail_stamp
 				print(f"\x1b[2K\r --> [{util.format_duration(detail_stamp - init_detail_stamp)}] Trained {grad_accum.batch_num / grad_accum.num_batches_used:.1%}: Mean loss {train_stats.loss:#.4g}, Top-k ({', '.join(f'{topk:.2%}' for topk in reversed(train_stats.topk))})", end='')
 
-		train_stats.update_pass()
+		train_stats.stop_epoch()
+		train_logit_stats.stop_epoch()
 		log.update(train_loss=train_stats.loss, min_train_loss=train_stats.loss_min)
 		for k, topk in enumerate(train_stats.topk, 1):
 			log[f'train_top{k}'] = topk
@@ -538,7 +545,8 @@ def train_model(C, device, train_loader, valid_loader, model, criterion, optimiz
 		print(f"Training results: Mean loss {train_stats.loss:#.4g}, Top-k ({', '.join(f'{topk:.2%}' for topk in reversed(train_stats.topk))})")
 
 		model.eval()
-		valid_stats.start_pass()
+		valid_stats.start_epoch()
+		valid_logit_stats.start_epoch()
 		num_valid_batches = len(valid_loader)
 		init_detail_stamp = timeit.default_timer()
 		last_detail_stamp = -math.inf
@@ -554,16 +562,19 @@ def train_model(C, device, train_loader, valid_loader, model, criterion, optimiz
 					output = model(data)
 					mean_batch_loss = criterion(output, target)
 
-				output_cpu = output.detach().to(device=cpu_device, dtype=float)
-				valid_stats.update_batch(num_in_batch, output_cpu, target_cpu, mean_batch_loss.item())
+				output_detach = output.detach()
+				valid_logit_stats.update(output_detach)
+				output_cpu = output_detach.to(device=cpu_device, dtype=float)
 				nan_monitor.update_batch(output_cpu)
+				valid_stats.update(num_in_batch, output_cpu, target_cpu, mean_batch_loss.item())
 
 				detail_stamp = timeit.default_timer()
 				if detail_stamp - last_detail_stamp >= 2.0:
 					last_detail_stamp = detail_stamp
 					print(f"\x1b[2K\r --> [{util.format_duration(detail_stamp - init_detail_stamp)}] Validated {batch_num / num_valid_batches:.1%}: Mean loss {valid_stats.loss:#.4g}, Top-k ({', '.join(f'{topk:.2%}' for topk in reversed(valid_stats.topk))})", end='')
 
-		valid_stats.update_pass()
+		valid_stats.stop_epoch()
+		valid_logit_stats.stop_epoch()
 		log.update(valid_loss=valid_stats.loss, min_valid_loss=valid_stats.loss_min)
 		for k, (topk, topk_max) in enumerate(zip(valid_stats.topk, valid_stats.topk_max), 1):
 			log[f'valid_top{k}'] = topk

@@ -9,6 +9,7 @@ import itertools
 import traceback
 import contextlib
 import collections
+import numpy as np
 import wandb
 import torch
 
@@ -103,18 +104,18 @@ class InferenceStats:
 
 	def __init__(self, num_topk=5):
 		self.num_topk = num_topk
-		self.start_pass()
+		self.start_epoch()
 		self.loss_min = math.inf
 		self.topk_max = [-math.inf] * self.num_topk
 
-	def start_pass(self):
+	def start_epoch(self):
 		self.num_samples = 0
 		self.loss = math.nan
 		self.loss_sum = 0
 		self.topk = [math.nan] * self.num_topk
 		self.topk_sum = [0] * self.num_topk
 
-	def update_batch(self, num_in_batch, output, target, mean_batch_loss):
+	def update(self, num_in_batch, output, target, mean_batch_loss):
 		# Note: Make sure to pass output/target as detached CPU tensors, and mean_batch_loss as a float (non-tensor) item()
 		self.num_samples += num_in_batch
 		self.loss_sum += mean_batch_loss * num_in_batch
@@ -124,7 +125,7 @@ class InferenceStats:
 			self.topk_sum[k] += batch_topk_sum[k]
 			self.topk[k] = self.topk_sum[k] / self.num_samples
 
-	def update_pass(self):
+	def stop_epoch(self):
 		assert isinstance(self.loss, float)
 		if self.loss < self.loss_min or math.isnan(self.loss):
 			self.loss_min = self.loss
@@ -206,6 +207,37 @@ class NaNMonitor:
 
 	def epoch_worm_count(self):
 		return self.epoch_nan_worm.count
+
+# Logit distribution statistics
+class LogitDistStats:
+
+	# TODO: batch_logits comes in as a CUDA tensor
+	# TODO: Use gather/scatter/argmax(top2?nanify xT first? pT and xT have same max index)/log_softmax on GPU to compute xT, max(xF), pT, max(pF) and concatenate them there into one chunk
+	# TODO: Move the computed values (single chunk) to CPU tensor
+	# TODO: Write the CPU tensor into an Nx4 CPU tensor
+	# TODO: On stop epoch convert to numpy() and run the appropriate binning etc
+	# TODO: Generate the appropriate wandb table / plot and see if you can get it to appear per-epoch in the web browser (consider doing it just once at the valid_top1_max?)
+
+	def __init__(self, num_samples, enabled=True):
+		self.num_samples = num_samples
+		self.enabled = enabled
+		self.data = np.empty((num_samples, 4), dtype=np.float32) if self.enabled else None  # TODO: NOT numpy
+		self.data_count = 0
+
+	def start_epoch(self):
+		self.data_count = 0
+
+	def update(self, batch_logits):
+		if not self.enabled:
+			return
+		new_data_count = self.data_count + batch_logits.shape[1]
+		self.data[self.data_count:new_data_count, 0] = BLAH
+		self.data_count = new_data_count
+
+	def stop_epoch(self):
+		if not self.enabled:
+			return
+		pass  # TODO
 
 # Wait around if paused
 def wait_if_paused(pause_files, device):
