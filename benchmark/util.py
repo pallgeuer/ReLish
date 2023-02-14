@@ -9,9 +9,11 @@ import itertools
 import traceback
 import contextlib
 import collections
+import matplotlib.pyplot as plt
 import numpy as np
 import wandb
 import torch
+import torch.nn.functional as F
 
 #
 # Wandb util
@@ -211,33 +213,44 @@ class NaNMonitor:
 # Logit distribution statistics
 class LogitDistStats:
 
-	# TODO: batch_logits comes in as a CUDA tensor
-	# TODO: Use gather/scatter/argmax(top2?nanify xT first? pT and xT have same max index)/log_softmax on GPU to compute xT, max(xF), pT, max(pF) and concatenate them there into one chunk
-	# TODO: Move the computed values (single chunk) to CPU tensor
-	# TODO: Write the CPU tensor into an Nx4 CPU tensor
-	# TODO: On stop epoch convert to numpy() and run the appropriate binning etc
-	# TODO: Generate the appropriate wandb table / plot and see if you can get it to appear per-epoch in the web browser (consider doing it just once at the valid_top1_max?)
-
 	def __init__(self, num_samples, enabled=True):
 		self.num_samples = num_samples
 		self.enabled = enabled
-		self.data = np.empty((num_samples, 4), dtype=np.float32) if self.enabled else None  # TODO: NOT numpy
+		self.data = torch.zeros(size=(self.num_samples, 4)) if self.enabled else None
 		self.data_count = 0
 
 	def start_epoch(self):
 		self.data_count = 0
 
-	def update(self, batch_logits):
+	def update(self, output, target):
 		if not self.enabled:
 			return
-		new_data_count = self.data_count + batch_logits.shape[1]
-		self.data[self.data_count:new_data_count, 0] = BLAH
+		new_data_count = self.data_count + output.shape[0]
+		probs = F.softmax(output, dim=1)
+		target = target.unsqueeze(dim=1)
+		self.data[self.data_count:new_data_count, 0:1] = output.gather(dim=1, index=target)                             # 0 => xT
+		logits_false = output.scatter(dim=1, index=target, value=-math.inf)
+		self.data[self.data_count:new_data_count, 1:2], max_false_index = torch.max(logits_false, dim=1, keepdim=True)  # 1 => max(xF)
+		self.data[self.data_count:new_data_count, 2:3] = probs.gather(dim=1, index=target)                              # 2 => pT
+		self.data[self.data_count:new_data_count, 3:4] = probs.gather(dim=1, index=max_false_index)                     # 3 => max(pF)
 		self.data_count = new_data_count
 
 	def stop_epoch(self):
 		if not self.enabled:
 			return
-		pass  # TODO
+		assert self.data_count == self.num_samples
+		data = self.data.numpy()
+		# TODO
+		hist, bin_edges = np.histogram(data[:, 0] - data[:, 1], bins='auto', density=True)
+		# table = wandb.Table(data=np.stack((0.5*(bin_edges[:-1] + bin_edges[1:]), hist), axis=1), columns=['xT', 'D'])
+		# wandb.log({"my_plot_xt": wandb.plot.line(table, 'xT', 'D', title='My custom plot')})
+		# TODO: Only plot if new best valid_top1!
+		# TODO: plt.ioff() / fig = plt.figure(figsize=(6.4,4.8),dpi=100) / ax = fig.add_subplot() / ax.stairs(hist, bin_edges, fill=True) / wandb.log({"blah": wandb.Image(fig)})
+		# TODO: plt.get_fignums() / ax.cla()
+
+		# TODO: Keep one single plot / axis going in the background (with plt.ioff() when doing anything?) that you keep ax.cla() and wandb.Image(fig)
+		# TODO: Whenever epoch is a new best (bool input to stop_epoch tells when this is the case?) generate all the required plots and return a dict of them (or wandb.log ("plot_*") them here with commit=False)
+		# TODO: Plot distributions of xT-max(xF), pT, max(pF), pT-max(pF)
 
 # Wait around if paused
 def wait_if_paused(pause_files, device):

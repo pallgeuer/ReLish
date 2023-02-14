@@ -525,7 +525,7 @@ def train_model(C, device, train_loader, valid_loader, model, criterion, optimiz
 				optimizer.zero_grad(set_to_none=True)
 
 			output_detach = output.detach()
-			train_logit_stats.update(output_detach)
+			train_logit_stats.update(output_detach, target)
 			output_cpu = output_detach.to(device=cpu_device, dtype=float)
 			nan_monitor.update_batch(output_cpu)
 			train_stats.update(num_in_batch, output_cpu, target_cpu, mean_batch_loss.item())
@@ -563,7 +563,7 @@ def train_model(C, device, train_loader, valid_loader, model, criterion, optimiz
 					mean_batch_loss = criterion(output, target)
 
 				output_detach = output.detach()
-				valid_logit_stats.update(output_detach)
+				valid_logit_stats.update(output_detach, target)
 				output_cpu = output_detach.to(device=cpu_device, dtype=float)
 				nan_monitor.update_batch(output_cpu)
 				valid_stats.update(num_in_batch, output_cpu, target_cpu, mean_batch_loss.item())
