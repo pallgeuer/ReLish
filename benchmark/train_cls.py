@@ -109,7 +109,7 @@ def main():
 			util.wait_if_paused(pause_files, device)
 			print()
 
-		train_loader, valid_loader, num_classes, in_shape, accum_size = load_dataset(C, device, details=args.dataset_details)
+		train_loader, valid_loader, tfrm_unnormalize, num_classes, in_shape, accum_size = load_dataset(C, device, details=args.dataset_details)
 		model = load_model(C, num_classes, in_shape, device, details=args.model_details)
 		criterion = load_criterion(C, num_classes, device, details=args.model_details)
 		optimizer = load_optimizer(C, model.parameters())
@@ -118,7 +118,7 @@ def main():
 		if args.dry:
 			print("Dry run => Would have trained model...")
 		else:
-			train_model(C, device, train_loader, valid_loader, model, criterion, optimizer, scheduler, accum_size, pause_files)
+			train_model(C, device, train_loader, valid_loader, tfrm_unnormalize, model, criterion, optimizer, scheduler, accum_size, pause_files)
 
 	print()
 
@@ -126,6 +126,7 @@ def main():
 def load_dataset(C, device, details=False):
 
 	tfrm_normalize_rgb = transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
+	tfrm_normalize = tfrm_normalize_rgb
 
 	is_inaturalist = C.dataset.startswith('iNaturalist')
 	if C.dataset in ('MNIST', 'FashionMNIST'):
@@ -134,12 +135,12 @@ def load_dataset(C, device, details=False):
 		if C.dataset == 'MNIST':
 			train_tfrm = valid_tfrm = transforms.Compose([
 				transforms.ToTensor(),
-				transforms.Normalize(mean=(0.1307,), std=(0.3081,)),
+				(tfrm_normalize := transforms.Normalize(mean=(0.1307,), std=(0.3081,))),
 			])
 		elif C.dataset == 'FashionMNIST':
 			valid_tfrm = transforms.Compose([
 				transforms.ToTensor(),
-				transforms.Normalize(mean=(0.2860,), std=(0.3530,)),
+				(tfrm_normalize := transforms.Normalize(mean=(0.2860,), std=(0.3530,))),
 			])
 			train_tfrm = transforms.Compose([
 				transforms.RandomHorizontalFlip(),
@@ -256,6 +257,8 @@ def load_dataset(C, device, details=False):
 	train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=model_batch_size, num_workers=dataset_workers, shuffle=True, pin_memory=pin_memory, drop_last=not C.no_batch_drop)
 	valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=model_batch_size, num_workers=dataset_workers, shuffle=False, pin_memory=pin_memory, drop_last=False)
 
+	tfrm_unnormalize = transforms.Normalize(mean=tuple(-mean / std for mean, std in zip(tfrm_normalize.mean, tfrm_normalize.std)), std=tuple(1 / std for std in tfrm_normalize.std))
+
 	if details:
 		print("Validation dataset objects:")
 		print(valid_dataset)
@@ -268,7 +271,7 @@ def load_dataset(C, device, details=False):
 		print()
 		show_dataset_details(*calc_dataset_details(train_loader), name='Training dataset')
 
-	return train_loader, valid_loader, num_classes, in_shape, accum_size
+	return train_loader, valid_loader, tfrm_unnormalize, num_classes, in_shape, accum_size
 
 # Calculate details of a dataset
 def calc_dataset_details(loader):
@@ -466,7 +469,7 @@ def load_scheduler(C, optimizer):
 		raise ValueError(f"Invalid learning rate scheduler specification: {C.scheduler}")
 
 # Train the model
-def train_model(C, device, train_loader, valid_loader, model, criterion, optimizer, scheduler, accum_size, pause_files):
+def train_model(C, device, train_loader, valid_loader, tfrm_unnormalize, model, criterion, optimizer, scheduler, accum_size, pause_files):
 
 	cpu_device = torch.device('cpu')
 	amp_enabled = C.amp and device.type == 'cuda'
