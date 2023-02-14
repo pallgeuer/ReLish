@@ -475,8 +475,8 @@ def train_model(C, device, train_loader, valid_loader, model, criterion, optimiz
 	warmup_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1 / (C.warmup_epochs + 1), end_factor=1, total_iters=C.warmup_epochs) if C.warmup_epochs >= 1 else None
 	model_saver = util.ModelCheckpointSaver(num_best=C.model_saves, maximise=True, save_last=False, upload=C.model_upload)
 	nan_monitor = util.NaNMonitor(max_batches=C.max_nan_batches, max_epochs=C.max_nan_epochs)
-	train_logit_stats = util.LogitDistStats(num_samples=grad_accum.num_samples_used, enabled=C.logit_stats)
-	valid_logit_stats = util.LogitDistStats(num_samples=len(valid_loader.dataset), enabled=C.logit_stats)
+	train_logit_stats = util.LogitDistStats(num_samples=grad_accum.num_samples_used, key_prefix='train_', enabled=C.logit_stats)
+	valid_logit_stats = util.LogitDistStats(num_samples=len(valid_loader.dataset), key_prefix='valid_', enabled=C.logit_stats)
 	train_stats = util.InferenceStats()
 	valid_stats = util.InferenceStats()
 
@@ -536,7 +536,6 @@ def train_model(C, device, train_loader, valid_loader, model, criterion, optimiz
 				print(f"\x1b[2K\r --> [{util.format_duration(detail_stamp - init_detail_stamp)}] Trained {grad_accum.batch_num / grad_accum.num_batches_used:.1%}: Mean loss {train_stats.loss:#.4g}, Top-k ({', '.join(f'{topk:.2%}' for topk in reversed(train_stats.topk))})", end='')
 
 		train_stats.stop_epoch()
-		train_logit_stats.stop_epoch()
 		log.update(train_loss=train_stats.loss, min_train_loss=train_stats.loss_min)
 		for k, topk in enumerate(train_stats.topk, 1):
 			log[f'train_top{k}'] = topk
@@ -574,7 +573,6 @@ def train_model(C, device, train_loader, valid_loader, model, criterion, optimiz
 					print(f"\x1b[2K\r --> [{util.format_duration(detail_stamp - init_detail_stamp)}] Validated {batch_num / num_valid_batches:.1%}: Mean loss {valid_stats.loss:#.4g}, Top-k ({', '.join(f'{topk:.2%}' for topk in reversed(valid_stats.topk))})", end='')
 
 		valid_stats.stop_epoch()
-		valid_logit_stats.stop_epoch()
 		log.update(valid_loss=valid_stats.loss, min_valid_loss=valid_stats.loss_min)
 		for k, (topk, topk_max) in enumerate(zip(valid_stats.topk, valid_stats.topk_max), 1):
 			log[f'valid_top{k}'] = topk
@@ -583,7 +581,9 @@ def train_model(C, device, train_loader, valid_loader, model, criterion, optimiz
 		print(f"\x1b[2K\rValidated {valid_stats.num_samples} samples in {num_valid_batches} batches in time {util.format_duration(detail_stamp - init_detail_stamp)}")
 		print(f"Validation results: Mean loss {valid_stats.loss:#.4g}, Top-k ({', '.join(f'{topk:.2%}' for topk in reversed(valid_stats.topk))})")
 
-		model_saver.save_model(model, epoch, metric=valid_stats.topk[0])
+		new_best = model_saver.save_model(model, epoch, metric=valid_stats.topk[0])
+		train_logit_stats.stop_epoch(plot=new_best)
+		valid_logit_stats.stop_epoch(plot=new_best)
 
 		if warmup_scheduler:
 			warmup_scheduler.step()

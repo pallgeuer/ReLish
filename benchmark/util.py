@@ -157,10 +157,11 @@ class ModelCheckpointSaver:
 		self.best_model_paths = collections.deque(maxlen=self.num_best) if self.num_best >= 1 else None
 
 	def save_model(self, model, epoch, metric, **extra_data):
-		is_best = self.best_model_paths is not None and (self.best_metric is None or (not self.maximise and metric <= self.best_metric) or (self.maximise and metric >= self.best_metric))
+		is_best = self.best_metric is None or (not self.maximise and metric <= self.best_metric) or (self.maximise and metric >= self.best_metric)
 		if is_best:
 			self.best_metric = metric
-		if self.save_last or is_best:
+		save_best = self.best_model_paths is not None and is_best
+		if self.save_last or save_best:
 			if not self.models_dir_created:
 				with contextlib.suppress(FileExistsError):
 					os.mkdir(self.models_dir)
@@ -174,12 +175,13 @@ class ModelCheckpointSaver:
 			if self.last_model_path is not None and self.last_model_path != last_model_path:
 				os.remove(self.last_model_path)
 			self.last_model_path = last_model_path
-		if is_best:
+		if save_best:
 			best_model_path = os.path.join(self.models_dir, f'{wandb.run.name}-E{epoch:03d}-best.pt')
 			torch.save(extra_data, best_model_path)
 			if len(self.best_model_paths) == self.best_model_paths.maxlen:
 				os.remove(self.best_model_paths[0])
 			self.best_model_paths.append(best_model_path)
+		return is_best
 
 # NaN monitor
 class NaNMonitor:
@@ -213,10 +215,23 @@ class NaNMonitor:
 # Logit distribution statistics
 class LogitDistStats:
 
-	def __init__(self, num_samples, enabled=True):
+	PLOTS = (
+		('xT_xFmax', 'darkorange'),
+		('pT', 'yellowgreen'),
+		('pFmax', 'lightcoral'),
+		('pT_pFmax', 'plum'),
+	)
+
+	def __init__(self, num_samples, key_prefix, enabled=True):
 		self.num_samples = num_samples
+		self.key_prefix = key_prefix
 		self.enabled = enabled
-		self.data = torch.zeros(size=(self.num_samples, 4)) if self.enabled else None
+		if self.enabled:
+			self.data = torch.zeros(size=(self.num_samples, 4))
+			with plt.ioff():
+				self.plot_fig = plt.figure(figsize=(6.4, 4.8), dpi=100)
+				self.plot_ax = self.plot_fig.add_axes(rect=(0.06, 0.05, 0.91, 0.93))
+				self.plot_ax.grid(visible=True)
 		self.data_count = 0
 
 	def start_epoch(self):
@@ -235,22 +250,21 @@ class LogitDistStats:
 		self.data[self.data_count:new_data_count, 3:4] = probs.gather(dim=1, index=max_false_index)                     # 3 => max(pF)
 		self.data_count = new_data_count
 
-	def stop_epoch(self):
-		if not self.enabled:
+	def stop_epoch(self, plot=True):
+		if not self.enabled or not plot:
 			return
 		assert self.data_count == self.num_samples
 		data = self.data.numpy()
-		# TODO
-		hist, bin_edges = np.histogram(data[:, 0] - data[:, 1], bins='auto', density=True)
-		# table = wandb.Table(data=np.stack((0.5*(bin_edges[:-1] + bin_edges[1:]), hist), axis=1), columns=['xT', 'D'])
-		# wandb.log({"my_plot_xt": wandb.plot.line(table, 'xT', 'D', title='My custom plot')})
-		# TODO: Only plot if new best valid_top1!
-		# TODO: plt.ioff() / fig = plt.figure(figsize=(6.4,4.8),dpi=100) / ax = fig.add_subplot() / ax.stairs(hist, bin_edges, fill=True) / wandb.log({"blah": wandb.Image(fig)})
-		# TODO: plt.get_fignums() / ax.cla()
-
-		# TODO: Keep one single plot / axis going in the background (with plt.ioff() when doing anything?) that you keep ax.cla() and wandb.Image(fig)
-		# TODO: Whenever epoch is a new best (bool input to stop_epoch tells when this is the case?) generate all the required plots and return a dict of them (or wandb.log ("plot_*") them here with commit=False)
-		# TODO: Plot distributions of xT-max(xF), pT, max(pF), pT-max(pF)
+		plots = {}
+		with plt.ioff():
+			for (wandb_key, color), data_values in zip(self.PLOTS, (data[:, 0] - data[:, 1], data[:, 2], data[:, 3], data[:, 2] - data[:, 3])):
+				hist, bin_edges = np.histogram(data_values, bins=120, density=True)
+				h = self.plot_ax.stairs(hist, bin_edges, fill=True, color=color)
+				self.plot_ax.set_xlim(bin_edges[0], bin_edges[-1])
+				self.plot_ax.set_ylim(0, np.max(hist))
+				plots[self.key_prefix + wandb_key] = wandb.Image(self.plot_fig)
+				h.remove()
+		wandb.log(plots, commit=False)
 
 # Wait around if paused
 def wait_if_paused(pause_files, device):
