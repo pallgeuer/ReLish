@@ -57,7 +57,8 @@ def main():
 	parser.add_argument('--aaa', type=int, default=1, metavar='NUM', help='Dummy variable that allows sweeps to do multiple passes of grid searches')
 	parser.add_argument('--max_nan_batches', type=int, default=3000, metavar='NUM', help='Abort training if this many batches have a NaN output (as judged by a worm)')
 	parser.add_argument('--max_nan_epochs', type=int, default=4, metavar='NUM', help='Abort training if this many epochs have a NaN training or validation loss (as judged by a worm)')
-	parser.add_argument('--logit_stats', action='store_true', help='Calculate and log logit statistics')
+	parser.add_argument('--log_samples', type=int, default=0, metavar='NUM', help='Log a certain number of samples plus info on every new best epoch')
+	parser.add_argument('--logit_stats', action='store_true', help='Calculate and log logit statistics on every new best epoch')
 	parser.add_argument('--dry', action='store_true', help='Show what would be done but do not actually run the training')
 	parser.add_argument('--no_wandb', dest='use_wandb', action='store_false', help='Do not use wandb')
 	parser.add_argument('--model_details', action='store_true', help='Whether to show model details')
@@ -253,7 +254,7 @@ def load_dataset(C, device, details=False):
 		accum_size = 1
 
 	dataset_workers = min(C.dataset_workers, model_batch_size)
-	pin_memory = (device.type == 'cuda')
+	pin_memory = (device.type == 'cuda' and C.log_samples <= 0)  # TODO: Make SampleLogger compatible with memory pinning?!
 	train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=model_batch_size, num_workers=dataset_workers, shuffle=True, pin_memory=pin_memory, drop_last=not C.no_batch_drop)
 	valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=model_batch_size, num_workers=dataset_workers, shuffle=False, pin_memory=pin_memory, drop_last=False)
 
@@ -478,6 +479,8 @@ def train_model(C, device, train_loader, valid_loader, tfrm_unnormalize, model, 
 	warmup_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1 / (C.warmup_epochs + 1), end_factor=1, total_iters=C.warmup_epochs) if C.warmup_epochs >= 1 else None
 	model_saver = util.ModelCheckpointSaver(num_best=C.model_saves, maximise=True, save_last=False, upload=C.model_upload)
 	nan_monitor = util.NaNMonitor(max_batches=C.max_nan_batches, max_epochs=C.max_nan_epochs)
+	train_sample_logger = util.SampleLogger(num_samples=grad_accum.num_samples_used, key_prefix='train_', sample_size=C.log_samples, data_tfrm=tfrm_unnormalize)
+	valid_sample_logger = util.SampleLogger(num_samples=len(valid_loader.dataset), key_prefix='valid_', sample_size=C.log_samples, data_tfrm=tfrm_unnormalize)
 	train_logit_stats = util.LogitDistStats(num_samples=grad_accum.num_samples_used, key_prefix='train_', enabled=C.logit_stats)
 	valid_logit_stats = util.LogitDistStats(num_samples=len(valid_loader.dataset), key_prefix='valid_', enabled=C.logit_stats)
 	train_stats = util.InferenceStats()
@@ -506,14 +509,15 @@ def train_model(C, device, train_loader, valid_loader, tfrm_unnormalize, model, 
 		model.train()
 		train_stats.start_epoch()
 		train_logit_stats.start_epoch()
+		train_sample_logger.start_epoch()
 		optimizer.zero_grad(set_to_none=True)
 		init_detail_stamp = timeit.default_timer()
 		last_detail_stamp = -math.inf
 
-		for data, target_cpu in grad_accum.loader():
+		for data_cpu, target_cpu in grad_accum.loader():
 
-			num_in_batch = data.shape[0]
-			data = data.to(device, non_blocking=True)
+			num_in_batch = data_cpu.shape[0]
+			data = data_cpu.to(device, non_blocking=True)
 			target = target_cpu.to(device, non_blocking=True)
 
 			with torch.autocast(device_type=device.type, enabled=amp_enabled):
@@ -531,6 +535,7 @@ def train_model(C, device, train_loader, valid_loader, tfrm_unnormalize, model, 
 			train_logit_stats.update(output_detach, target)
 			output_cpu = output_detach.to(device=cpu_device, dtype=float)
 			nan_monitor.update_batch(output_cpu)
+			train_sample_logger.update(data_cpu, output_cpu, target_cpu)
 			train_stats.update(num_in_batch, output_cpu, target_cpu, mean_batch_loss.item())
 
 			detail_stamp = timeit.default_timer()
@@ -549,15 +554,16 @@ def train_model(C, device, train_loader, valid_loader, tfrm_unnormalize, model, 
 		model.eval()
 		valid_stats.start_epoch()
 		valid_logit_stats.start_epoch()
+		valid_sample_logger.start_epoch()
 		num_valid_batches = len(valid_loader)
 		init_detail_stamp = timeit.default_timer()
 		last_detail_stamp = -math.inf
 
 		with torch.inference_mode():
-			for batch_num, (data, target_cpu) in enumerate(valid_loader, 1):
+			for batch_num, (data_cpu, target_cpu) in enumerate(valid_loader, 1):
 
-				num_in_batch = data.shape[0]
-				data = data.to(device, non_blocking=True)
+				num_in_batch = data_cpu.shape[0]
+				data = data_cpu.to(device, non_blocking=True)
 				target = target_cpu.to(device, non_blocking=True)
 
 				with torch.autocast(device_type=device.type, enabled=amp_enabled):
@@ -568,6 +574,7 @@ def train_model(C, device, train_loader, valid_loader, tfrm_unnormalize, model, 
 				valid_logit_stats.update(output_detach, target)
 				output_cpu = output_detach.to(device=cpu_device, dtype=float)
 				nan_monitor.update_batch(output_cpu)
+				valid_sample_logger.update(data_cpu, output_cpu, target_cpu)
 				valid_stats.update(num_in_batch, output_cpu, target_cpu, mean_batch_loss.item())
 
 				detail_stamp = timeit.default_timer()
@@ -585,8 +592,10 @@ def train_model(C, device, train_loader, valid_loader, tfrm_unnormalize, model, 
 		print(f"Validation results: Mean loss {valid_stats.loss:#.4g}, Top-k ({', '.join(f'{topk:.2%}' for topk in reversed(valid_stats.topk))})")
 
 		new_best = model_saver.save_model(model, epoch, metric=valid_stats.topk[0])
-		train_logit_stats.stop_epoch(plot=new_best)
-		valid_logit_stats.stop_epoch(plot=new_best)
+		train_logit_stats.stop_epoch(log=new_best)
+		valid_logit_stats.stop_epoch(log=new_best)
+		train_sample_logger.stop_epoch(log=new_best)
+		valid_sample_logger.stop_epoch(log=new_best)
 
 		if warmup_scheduler:
 			warmup_scheduler.step()

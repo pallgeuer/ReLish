@@ -4,6 +4,7 @@
 import gc
 import math
 import time
+import random
 import os.path
 import itertools
 import traceback
@@ -212,6 +213,60 @@ class NaNMonitor:
 	def epoch_worm_count(self):
 		return self.epoch_nan_worm.count
 
+# Sample logger
+class SampleLogger:
+
+	COLUMNS = ['Index', 'Image', 'Guess', 'pG', 'Truth', 'pT', 'False', 'pFmax', 'pT-pFmax', 'xT-xFmax']
+
+	def __init__(self, num_samples, key_prefix, sample_size=16, randomise=True, data_tfrm=None):
+		self.num_samples = num_samples
+		self.key_prefix = key_prefix
+		self.sample_size = min(sample_size, num_samples)
+		self.randomise = randomise
+		self.data_tfrm = data_tfrm
+		self.enabled = self.sample_size > 0
+		if not self.enabled:
+			self.indices = None
+		elif self.randomise:
+			self.indices = sorted(random.sample(range(num_samples), k=sample_size))
+		else:
+			self.indices = tuple(range(num_samples - sample_size, num_samples))
+		self.sampled_data = None
+		self.data_count = None
+
+	def start_epoch(self):
+		if self.enabled:
+			self.sampled_data = []
+			self.data_count = 0
+
+	def update(self, data, output, target):
+		# Note: Inputs should be detached CPU tensors (data/target are generally not in the computational graph to begin with and so generally don't explicitly need to be detached)
+		if self.enabled:
+			new_data_count = self.data_count + data.shape[0]
+			for index in itertools.islice(self.indices, len(self.sampled_data), None):
+				if index >= new_data_count:
+					break
+				batch_index = index - self.data_count
+				x = output[batch_index]
+				image = wandb.Image(self.data_tfrm(data[batch_index:batch_index + 1]) if self.data_tfrm else data[batch_index])
+				guess = x.argmax().item()
+				p = F.softmax(x, dim=0)
+				pG = p[guess].item()
+				truth = target[batch_index].item()
+				pT = p[truth].item()
+				max_indices = x.topk(k=2).indices
+				false = max_indices[max_indices != truth][0].item()
+				pFmax = p[false].item()
+				pT_pFmax = pT - pFmax
+				xT_xFmax = (x[truth] - x[false]).item()
+				self.sampled_data.append((index, image, guess, pG, truth, pT, false, pFmax, pT_pFmax, xT_xFmax))  # TODO: String class names
+			self.data_count = new_data_count
+
+	def stop_epoch(self, log=True):
+		if self.enabled and log:
+			sample_table = wandb.Table(data=self.sampled_data, columns=self.COLUMNS)
+			wandb.log({self.key_prefix + 'sample_table': sample_table}, commit=False)
+
 # Logit distribution statistics
 class LogitDistStats:
 
@@ -235,36 +290,36 @@ class LogitDistStats:
 		self.data_count = 0
 
 	def start_epoch(self):
-		self.data_count = 0
+		if self.enabled:
+			self.data_count = 0
 
 	def update(self, output, target):
-		if not self.enabled:
-			return
-		new_data_count = self.data_count + output.shape[0]
-		probs = F.softmax(output, dim=1)
-		target = target.unsqueeze(dim=1)
-		self.data[self.data_count:new_data_count, 0:1] = output.gather(dim=1, index=target)                             # 0 => xT
-		logits_false = output.scatter(dim=1, index=target, value=-math.inf)
-		self.data[self.data_count:new_data_count, 1:2], max_false_index = torch.max(logits_false, dim=1, keepdim=True)  # 1 => max(xF)
-		self.data[self.data_count:new_data_count, 2:3] = probs.gather(dim=1, index=target)                              # 2 => pT
-		self.data[self.data_count:new_data_count, 3:4] = probs.gather(dim=1, index=max_false_index)                     # 3 => max(pF)
-		self.data_count = new_data_count
+		# Note: Inputs should be detached device tensors (target is generally not in the computational graph to begin with and so generally doesn't explicitly need to be detached)
+		if self.enabled:
+			new_data_count = self.data_count + output.shape[0]
+			probs = F.softmax(output, dim=1)
+			target = target.unsqueeze(dim=1)
+			self.data[self.data_count:new_data_count, 0:1] = output.gather(dim=1, index=target)                             # 0 => xT
+			logits_false = output.scatter(dim=1, index=target, value=-math.inf)
+			self.data[self.data_count:new_data_count, 1:2], max_false_index = torch.max(logits_false, dim=1, keepdim=True)  # 1 => max(xF)
+			self.data[self.data_count:new_data_count, 2:3] = probs.gather(dim=1, index=target)                              # 2 => pT
+			self.data[self.data_count:new_data_count, 3:4] = probs.gather(dim=1, index=max_false_index)                     # 3 => max(pF)
+			self.data_count = new_data_count
 
-	def stop_epoch(self, plot=True):
-		if not self.enabled or not plot:
-			return
-		assert self.data_count == self.num_samples
-		data = self.data.numpy()
-		plots = {}
-		with plt.ioff():
-			for (wandb_key, color), data_values in zip(self.PLOTS, (data[:, 0] - data[:, 1], data[:, 2], data[:, 3], data[:, 2] - data[:, 3])):
-				hist, bin_edges = np.histogram(data_values, bins=120, density=True)
-				h = self.plot_ax.stairs(hist, bin_edges, fill=True, color=color)
-				self.plot_ax.set_xlim(bin_edges[0], bin_edges[-1])
-				self.plot_ax.set_ylim(0, np.max(hist))
-				plots[self.key_prefix + wandb_key] = wandb.Image(self.plot_fig)
-				h.remove()
-		wandb.log(plots, commit=False)
+	def stop_epoch(self, log=True):
+		if self.enabled and log:
+			assert self.data_count == self.num_samples
+			data = self.data.numpy()
+			plots = {}
+			with plt.ioff():
+				for (wandb_key, color), data_values in zip(self.PLOTS, (data[:, 0] - data[:, 1], data[:, 2], data[:, 3], data[:, 2] - data[:, 3])):
+					hist, bin_edges = np.histogram(data_values, bins=120, density=True)
+					h = self.plot_ax.stairs(hist, bin_edges, fill=True, color=color)
+					self.plot_ax.set_xlim(bin_edges[0], bin_edges[-1])
+					self.plot_ax.set_ylim(0, np.max(hist))
+					plots[self.key_prefix + wandb_key] = wandb.Image(self.plot_fig)
+					h.remove()
+			wandb.log(plots, commit=False)
 
 # Wait around if paused
 def wait_if_paused(pause_files, device):
