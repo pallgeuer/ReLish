@@ -254,7 +254,7 @@ def load_dataset(C, device, details=False):
 		accum_size = 1
 
 	dataset_workers = min(C.dataset_workers, model_batch_size)
-	pin_memory = (device.type == 'cuda' and C.log_samples <= 0)  # TODO: Make SampleLogger compatible with memory pinning?!
+	pin_memory = (device.type == 'cuda')
 	train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=model_batch_size, num_workers=dataset_workers, shuffle=True, pin_memory=pin_memory, drop_last=not C.no_batch_drop)
 	valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=model_batch_size, num_workers=dataset_workers, shuffle=False, pin_memory=pin_memory, drop_last=False)
 
