@@ -479,8 +479,8 @@ def train_model(C, device, train_loader, valid_loader, tfrm_unnormalize, model, 
 	warmup_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1 / (C.warmup_epochs + 1), end_factor=1, total_iters=C.warmup_epochs) if C.warmup_epochs >= 1 else None
 	model_saver = util.ModelCheckpointSaver(num_best=C.model_saves, maximise=True, save_last=False, upload=C.model_upload)
 	nan_monitor = util.NaNMonitor(max_batches=C.max_nan_batches, max_epochs=C.max_nan_epochs)
-	train_sample_logger = util.SampleLogger(num_samples=grad_accum.num_samples_used, key_prefix='train_', sample_size=C.log_samples, data_tfrm=tfrm_unnormalize)
-	valid_sample_logger = util.SampleLogger(num_samples=len(valid_loader.dataset), key_prefix='valid_', sample_size=C.log_samples, data_tfrm=tfrm_unnormalize)
+	train_sample_logger = util.SampleLogger(num_samples=grad_accum.num_samples_used, key_prefix='train_', sample_size=C.log_samples, data_tfrm=tfrm_unnormalize, classes=getattr(train_loader.dataset, 'classes', None))
+	valid_sample_logger = util.SampleLogger(num_samples=len(valid_loader.dataset), key_prefix='valid_', sample_size=C.log_samples, data_tfrm=tfrm_unnormalize, classes=getattr(valid_loader.dataset, 'classes', None))
 	train_logit_stats = util.LogitDistStats(num_samples=grad_accum.num_samples_used, key_prefix='train_', enabled=C.logit_stats)
 	valid_logit_stats = util.LogitDistStats(num_samples=len(valid_loader.dataset), key_prefix='valid_', enabled=C.logit_stats)
 	train_stats = util.InferenceStats()

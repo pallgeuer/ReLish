@@ -218,24 +218,24 @@ class SampleLogger:
 
 	COLUMNS = ['Index', 'Image', 'Guess', 'pG', 'Truth', 'pT', 'False', 'pFmax', 'pT-pFmax', 'xT-xFmax']
 
-	def __init__(self, num_samples, key_prefix, sample_size=16, randomise=True, data_tfrm=None):
+	def __init__(self, num_samples, key_prefix, sample_size=12, randomise=True, data_tfrm=None, classes=None):
 		self.num_samples = num_samples
 		self.key_prefix = key_prefix
 		self.sample_size = min(sample_size, num_samples)
 		self.randomise = randomise
 		self.data_tfrm = data_tfrm
+		self.classes = classes
 		self.enabled = self.sample_size > 0
-		if not self.enabled:
-			self.indices = None
-		elif self.randomise:
-			self.indices = sorted(random.sample(range(num_samples), k=sample_size))
-		else:
-			self.indices = tuple(range(num_samples - sample_size, num_samples))
+		self.indices = None
 		self.sampled_data = None
 		self.data_count = None
 
 	def start_epoch(self):
 		if self.enabled:
+			if self.randomise:
+				self.indices = sorted(random.sample(range(self.num_samples), k=self.sample_size))
+			else:
+				self.indices = tuple(range(self.num_samples - self.sample_size, self.num_samples))
 			self.sampled_data = []
 			self.data_count = 0
 
@@ -259,7 +259,11 @@ class SampleLogger:
 				pFmax = p[false].item()
 				pT_pFmax = pT - pFmax
 				xT_xFmax = (x[truth] - x[false]).item()
-				self.sampled_data.append((index, image, guess, pG, truth, pT, false, pFmax, pT_pFmax, xT_xFmax))  # TODO: String class names
+				if self.classes is not None:
+					guess = f"{self.classes[guess]} ({guess})"
+					truth = f"{self.classes[truth]} ({truth})"
+					false = f"{self.classes[false]} ({false})"
+				self.sampled_data.append((index, image, guess, pG, truth, pT, false, pFmax, pT_pFmax, xT_xFmax))
 			self.data_count = new_data_count
 
 	def stop_epoch(self, log=True):
