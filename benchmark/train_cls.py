@@ -223,6 +223,8 @@ def load_dataset(C, device, details=False):
 			folder_path = os.path.join(C.dataset_path, 'iNaturalist')
 			train_dataset = torchvision.datasets.INaturalist(root=folder_path, version=f"{version_year}_train{'_mini' if match.group(2) else ''}", target_type=target_type, transform=train_tfrm)
 			valid_dataset = torchvision.datasets.INaturalist(root=folder_path, version=f"{version_year}_valid", target_type=target_type, transform=valid_tfrm)
+			train_dataset.classes = tuple(' '.join(cat.split('_')[-2:]) for cat in train_dataset.all_categories) if target_type == 'full' else tuple(train_dataset.categories_index[target_type].keys())
+			valid_dataset.classes = tuple(' '.join(cat.split('_')[-2:]) for cat in valid_dataset.all_categories) if target_type == 'full' else tuple(valid_dataset.categories_index[target_type].keys())
 		else:
 			if C.dataset == 'Imagenette':
 				num_classes = 10
