@@ -498,7 +498,10 @@ def train_model(C, device, train_loader, valid_loader, tfrm_unnormalize, model, 
 		output_nans=nan_monitor.nan_count(),
 	))
 
+	stats_epoch = 0
+	stats_valid_top1 = -math.inf
 	init_epoch_stamp = epoch_stamp = timeit.default_timer()
+
 	for epoch in range(1, C.epochs + 1):
 
 		util.wait_if_paused(pause_files, device)
@@ -593,11 +596,17 @@ def train_model(C, device, train_loader, valid_loader, tfrm_unnormalize, model, 
 		print(f"\x1b[2K\rValidated {valid_stats.num_samples} samples in {num_valid_batches} batches in time {util.format_duration(detail_stamp - init_detail_stamp)}")
 		print(f"Validation results: Mean loss {valid_stats.loss:#.4g}, Top-k ({', '.join(f'{topk:.2%}' for topk in reversed(valid_stats.topk))})")
 
-		new_best = model_saver.save_model(model, epoch, metric=valid_stats.topk[0])
-		train_logit_stats.stop_epoch(log=new_best)
-		valid_logit_stats.stop_epoch(log=new_best)
-		train_sample_logger.stop_epoch(log=new_best)
-		valid_sample_logger.stop_epoch(log=new_best)
+		valid_top1 = valid_stats.topk[0]
+		model_saver.save_model(model, epoch, metric=valid_top1)
+
+		log_stats = (epoch == 1 or epoch == C.epochs or epoch >= stats_epoch + max(round(C.epochs / 10), 1) or valid_top1 >= stats_valid_top1 + (1 - stats_valid_top1) / 10)
+		if log_stats:
+			stats_epoch = epoch
+			stats_valid_top1 = max(stats_valid_top1, valid_top1)
+		train_logit_stats.stop_epoch(log=log_stats)
+		valid_logit_stats.stop_epoch(log=log_stats)
+		train_sample_logger.stop_epoch(log=log_stats)
+		valid_sample_logger.stop_epoch(log=log_stats)
 
 		if warmup_scheduler:
 			warmup_scheduler.step()
