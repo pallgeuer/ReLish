@@ -37,7 +37,7 @@ EOM
 
 - Install PyTorch:
 	conda activate $ENV
-	conda install pytorch=$PYTORCH torchvision cudatoolkit=$CUDA_VERSION -c pytorch -c conda-forge
+	conda install pytorch=$PYTORCH torchvision cudatoolkit=$CUDA_VERSION -c conda-forge -c pytorch
 
 - Install OpenMM packages:
 	conda activate $ENV
