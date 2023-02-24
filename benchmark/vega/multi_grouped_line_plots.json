@@ -1,0 +1,203 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v4.json",
+  "description": "A simple line plot (allow multiple grouping)",
+  "data": {
+    "name": "wandb"
+  },
+  "transform": [
+    {"filter": {"field": "${field:x}", "valid": true}},
+    {"filter": {"field": "${field:y}", "valid": true}},
+    {
+      "calculate": "'${field:groupKeys}' !== '' && datum['${field:groupKeys}'] !== ''",
+      "as": "grouped"
+    },
+    {
+      "calculate": "if(datum.grouped, datum['${field:groupKeys}'] + if('${field:groupAlso}' === '', '', ' | ' + datum['${field:groupAlso}']), datum.name)",
+      "as": "groupkey"
+    },
+    {
+      "calculate": "if(datum.grouped, datum.groupkey, datum.color)",
+      "as": "color"
+    },
+  {
+    "aggregate": [
+      {
+      "op" : "average",
+      "field": "${field:y}",
+      "as": "${field:y}"
+      },
+      {
+      "op" : "min",
+      "field": "${field:y}",
+      "as": "ymin"
+      },
+      {
+      "op" : "max",
+      "field": "${field:y}",
+      "as": "ymax"
+      }
+    ],
+    "groupby": ["${field:x}", "groupkey", "color", "grouped"]
+  }
+],
+  "title": "${string:title}",
+  "encoding":{
+        "x": {
+          "field": "${field:x}",
+          "type": "quantitative"
+        }
+  },
+  "layer": [
+    {
+      "transform": [
+        {"filter": "datum.grouped == false"}
+      ],
+      "encoding": {
+        "color": {
+            "field": "groupkey",
+            "type": "nominal",
+            "scale": {"range": {"field": "color"}},
+            "legend": {"title": null}
+        },
+        "y": {
+          "field": "${field:y}",
+          "type": "quantitative",
+          "scale": {"zero": false},
+          "axis": {"title": "${field:y}"}
+        }
+      },
+      "layer": [
+        {
+          "selection": {
+            "grid": {
+              "type": "interval",
+              "bind": "scales"
+            }
+          },
+          "mark": "line",
+          "encoding": {
+            "size": {
+              "value": 1.5
+            }
+          }
+        },
+        {
+          "transform": [
+            {
+              "filter": {
+                "selection": "hover"
+              }
+            }
+          ],
+          "mark": "point"
+        }
+      ]
+    },
+    {
+      "transform": [
+        {"filter": "datum.grouped == true"}
+      ],
+      "encoding": {
+        "color": {
+          "field": "groupkey",
+          "type": "nominal",
+          "scale": {"range": "category"},
+          "legend": {"title": null, "disable": true}
+          },
+        "y": {
+          "field": "${field:y}",
+          "type": "quantitative",
+          "scale": {"zero": false},
+          "axis": {"title": "${field:y}"}
+        }
+      },
+      "layer": [
+        {
+          "selection": {
+            "grid1": {
+              "type": "interval",
+              "bind": "scales"
+            }
+          },
+          "mark": "line",
+          "encoding": {
+            "size": {
+              "value": 1.5
+            }
+          }
+        },
+        {
+          "transform": [
+            {
+              "filter": {
+                "selection": "hover"
+              }
+            }
+          ],
+          "mark": "point"
+        }
+      ]
+    },
+    {
+      "transform": [
+        {"filter": "datum.grouped == true"}
+      ],
+      "mark": "errorband",
+      "encoding": {
+        "color": {
+          "field": "groupkey",
+          "type": "nominal",
+          "scale": {"range": "category"},
+          "legend": {"title": null, "offset": 12}
+          },
+        "y": {
+          "field": "ymin",
+          "type": "quantitative",
+          "scale": {"zero": false},
+          "axis": {"title": null}
+        },
+        "y2": {"field": "ymax"}
+      }
+    },
+    {
+      "transform": [
+        {
+          "pivot": "groupkey",
+          "value": "${field:y}",
+          "groupby": [
+            "${field:x}"
+          ],
+          "op": "average"
+        }
+      ],
+      "mark": {
+        "type": "rule",
+        "tooltip": {
+          "content": "data"
+        }
+      },
+      "encoding": {
+        "opacity": {
+          "condition": {
+            "value": 0.3,
+            "selection": "hover"
+          },
+          "value": 0
+        }
+      },
+      "selection": {
+        "hover": {
+          "type": "single",
+          "fields": [
+            "${field:x}"
+          ],
+          "nearest": true,
+          "on": "mouseover",
+          "empty": "none",
+          "clear": "mouseout"
+        }
+      }
+    }
+  ],
+  "resolve": {"scale": {"color": "independent"}}
+}
