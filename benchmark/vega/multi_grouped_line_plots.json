@@ -12,7 +12,7 @@
       "as": "grouped"
     },
     {
-      "calculate": "if(datum.grouped, datum['${field:groupKeys}'] + if('${field:groupAlso}' === '', '', ' | ' + datum['${field:groupAlso}']), datum.name)",
+      "calculate": "if(datum.grouped, datum['${field:groupKeys}'] + if('${field:groupAlso}' === '', '', ' | ' + datum['${field:groupAlso}']) + if('${field:groupAlso2}' === '', '', ' | ' + datum['${field:groupAlso2}']), datum.name)",
       "as": "groupkey"
     },
     {

@@ -3,7 +3,7 @@
   "description": "Scatter plot with nominal x-values that are sorted by y-value",
   "data": {"name": "wandb"},
   "transform": [
-    {"calculate": "if('${field:groupKey}' === ''  || datum['${field:groupKey}'] === '', datum.name, datum['${field:groupKey}'])", "as": "groupKey"},
+    {"calculate": "if('${field:groupKey}' === ''  || datum['${field:groupKey}'] === '', datum.name, datum['${field:groupKey}'] + if('${field:groupAlso}' === '', '', ' | ' + datum['${field:groupAlso}']) + if('${field:groupAlso2}' === '', '', ' | ' + datum['${field:groupAlso2}']))", "as": "groupKey"},
     {
       "groupby": ["${field:x}", "groupKey"],
       "joinaggregate": [{"op": "average", "field": "${field:y}", "as": "averagedY"}]
