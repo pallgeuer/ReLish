@@ -623,7 +623,7 @@ def train_model(C, device, train_loader, valid_loader, tfrm_unnormalize, model, 
 
 		if nan_monitor.update_epoch(train_stats.loss, valid_stats.loss):
 			print(f"Aborting training run due to excessive NaNs ({nan_monitor.epoch_worm_count()} worm epochs, {nan_monitor.batch_worm_count()} worm batches)")
-			break
+			raise RuntimeError(f"Too many output NaNs encountered during training ({nan_monitor.epoch_worm_count()} worm epochs, {nan_monitor.batch_worm_count()} worm batches)")
 
 # Run main function
 if __name__ == "__main__":
