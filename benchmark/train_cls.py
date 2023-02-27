@@ -35,7 +35,7 @@ def main():
 	parser.add_argument('--wandb_name', type=str, default=None, metavar='NAME', help='Wandb run name')
 	parser.add_argument('--dataset', type=str, default='CIFAR10', metavar='NAME', help='Classification dataset to train on (default: %(default)s)')
 	parser.add_argument('--dataset_path', type=str, default=None, metavar='PATH', help='Classification dataset root path (default: ENV{DATASET_PATH} or ~/Datasets)')
-	parser.add_argument('--dataset_workers', type=int, default=4, metavar='NUM', help='Number of worker processes to use for dataset loading (default: %(default)d)')
+	parser.add_argument('--dataset_workers', type=int, default=8, metavar='NUM', help='Number of worker processes to use for dataset loading (default: %(default)d)')
 	parser.add_argument('--no_auto_augment', action='store_true', help='Disable the AutoAugment input data transform (where present)')
 	parser.add_argument('--model', type=str, default='resnet18', metavar='MODEL', help='Classification model (default: %(default)s)')
 	parser.add_argument('--model_saves', type=int, default=0, metavar='NUM', help='Number of best model checkpoints to maintain during training (default: %(default)d)')
