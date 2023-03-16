@@ -7,8 +7,8 @@ ARG PYTORCH=1.12
 
 RUN --mount=type=cache,target=/opt/conda/pkgs \
     conda create --copy -p /env python=$PYTHON && \
-    conda install -p /env -c conda-forge -c pytorch cudatoolkit=$CUDA_VERSION pytorch=$PYTORCH torchvision matplotlib && \
-    conda run -p /env python -m pip install --no-cache-dir wandb
+    conda install -p /env -c conda-forge -c pytorch cudatoolkit=$CUDA_VERSION pytorch=$PYTORCH torchvision && \
+    conda run -p /env python -m pip install --no-cache-dir wandb matplotlib
 
 RUN find -name '*.a' -delete && \
     find -name '__pycache__' -type d -exec rm -rf '{}' '+'
