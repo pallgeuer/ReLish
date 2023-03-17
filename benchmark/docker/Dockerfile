@@ -22,4 +22,6 @@ ENV WANDB_DIR=/relish/log
 
 COPY --from=condainstall /env /env
 COPY . /relish
+
+RUN ln -s /relish/train_cls.py /train_cls.py
 # EOF
