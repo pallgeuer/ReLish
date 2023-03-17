@@ -71,6 +71,9 @@ DOCKER
 - Clean old docker images:
 	docker image prune
 
+- Nuke relish:
+	docker stop relish; docker rm relish; docker image rm relish; docker image prune; docker builder prune --all
+
 - Inspect docker image contents without running it:
 	docker create --name=tmp_relish relish:latest
 	docker ps -a
@@ -80,13 +83,16 @@ DOCKER
 	docker rm tmp_relish
 
 - Run the docker image as a container:
-	Create the container:
+	Ensure wandb API key is available:
 		export WANDB_API_KEY=???  # Get from: https://wandb.ai/authorize
-		docker create --name relish -it --gpus all --network host --env WANDB_API_KEY relish:latest
+		export WANDB_DIR=~/Code/ReLish/benchmark/log
+		export DATASET_PATH=~/Datasets
+	Create the container:
+		docker create --name relish -it --gpus all --network host --env WANDB_API_KEY --mount "type=bind,source=$DATASET_PATH,target=/Datasets,readonly" --mount "type=bind,source=$WANDB_DIR,target=/relish/log" relish:latest
 	Start the container and enter the corresponding bash session interactively:
 		docker start -ia relish  # Ctrl+D to exit and stop container, Ctrl+P -> Ctrl+Q to exit without stopping container
 	Start the container in the background and attach to it later:
-		docker start relish
+		docker start relish   # If the container was started or run with something other than bash, then this will execute THAT in the background, not bash
 		docker attach relish  # Ctrl+D to exit and stop container, Ctrl+P -> Ctrl+Q to exit without stopping container
 	Execute something inside the container:
 		docker exec -it relish bash
@@ -94,8 +100,9 @@ DOCKER
 		docker exec -it relish wandb login
 		docker exec -it relish wandb agent PROJECT/ENTITY/SWEEP
 	Create, start and run a container all in one go:
-		docker run --rm --name relish -it --gpus all --network host --env WANDB_API_KEY relish:latest
-		docker run --rm --name relish -it --gpus all --network host --env WANDB_API_KEY relish:latest train_cls.py --help
+		docker run --rm --name relish -it --gpus all --network host --env WANDB_API_KEY --mount "type=bind,source=$DATASET_PATH,target=/Datasets,readonly" --mount "type=bind,source=$WANDB_DIR,target=/relish/log" relish:latest
+		docker run --rm --name relish -it --gpus all --network host --env WANDB_API_KEY --mount "type=bind,source=$DATASET_PATH,target=/Datasets,readonly" --mount "type=bind,source=$WANDB_DIR,target=/relish/log" relish:latest train_cls.py --help
+		docker run --rm --name relish -it --gpus all --network host --env WANDB_API_KEY --mount "type=bind,source=$DATASET_PATH,target=/Datasets,readonly" --mount "type=bind,source=$WANDB_DIR,target=/relish/log" relish:latest wandb agent PROJECT/ENTITY/SWEEP
 	Stop and remove the container:
 		docker attach relish  # Press Ctrl+D
 		docker stop relish
