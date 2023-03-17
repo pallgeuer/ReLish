@@ -18,6 +18,7 @@ FROM ubuntu:22.04
 
 ENV PATH="/relish:/env/bin:$PATH"
 ENV DATASET_PATH=/Datasets
+ENV WANDB_DIR=/relish/log
 
 COPY --from=condainstall /env /env
 COPY . /relish
