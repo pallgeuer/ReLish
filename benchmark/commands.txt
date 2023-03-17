@@ -85,7 +85,7 @@ DOCKER
 - Run the docker image as a container:
 	Ensure wandb API key is available:
 		export WANDB_API_KEY=???  # Get from: https://wandb.ai/authorize
-		export WANDB_DIR=~/Code/ReLish/benchmark/log
+		export WANDB_DIR=~/Code/ReLish/benchmark/docker
 		export DATASET_PATH=~/Datasets
 	Create the container:
 		docker create --name relish -it --gpus all --network host --env WANDB_API_KEY --mount "type=bind,source=$DATASET_PATH,target=/Datasets,readonly" --mount "type=bind,source=$WANDB_DIR,target=/relish/log" relish:latest
