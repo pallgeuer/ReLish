@@ -69,7 +69,7 @@ def main():
 		args.dataset_path = os.environ.get('DATASET_PATH') or '~/Datasets'
 	args.dataset_path = os.path.expanduser(args.dataset_path)
 
-	log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'log')
+	log_dir = os.environ.get('WANDB_DIR') or os.path.join(os.path.dirname(os.path.realpath(__file__)), 'log')
 	with contextlib.suppress(OSError):
 		os.mkdir(log_dir)
 
