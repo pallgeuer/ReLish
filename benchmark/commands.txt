@@ -100,7 +100,7 @@ DOCKER
 		docker exec -it relish wandb login
 		docker exec -it relish wandb agent PROJECT/ENTITY/SWEEP
 	Create, start and run a container all in one go:
-		docker run --rm --name relish -it --gpus all --network host --env WANDB_API_KEY --mount "type=bind,source=$DATASET_PATH,target=/Datasets,readonly" --mount "type=bind,source=$WANDB_DIR,target=/relish/log" relish:latest
+		docker run --name relish -it --gpus all --network host --env WANDB_API_KEY --mount "type=bind,source=$DATASET_PATH,target=/Datasets,readonly" --mount "type=bind,source=$WANDB_DIR,target=/relish/log" relish:latest
 		docker run --rm --name relish -it --gpus all --network host --env WANDB_API_KEY --mount "type=bind,source=$DATASET_PATH,target=/Datasets,readonly" --mount "type=bind,source=$WANDB_DIR,target=/relish/log" relish:latest train_cls.py --help
 		docker run --rm --name relish -it --gpus all --network host --env WANDB_API_KEY --mount "type=bind,source=$DATASET_PATH,target=/Datasets,readonly" --mount "type=bind,source=$WANDB_DIR,target=/relish/log" relish:latest wandb agent PROJECT/ENTITY/SWEEP
 	Stop and remove the container:
