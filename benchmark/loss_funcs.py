@@ -337,6 +337,7 @@ def resolve_loss_module(loss_spec: str, num_classes, reduction='mean', **kwargs)
 class DualLogSoftmaxFunction(torch.autograd.Function):
 
 	@staticmethod
+	@torch.cuda.amp.custom_fwd
 	def forward(ctx, inp, dim):
 		ctx.set_materialize_grads(False)
 		ctx.dim = dim
@@ -349,6 +350,7 @@ class DualLogSoftmaxFunction(torch.autograd.Function):
 		return stable_inp.sub_(logsumexp), neg_softmax.log1p()
 
 	@staticmethod
+	@torch.cuda.amp.custom_bwd
 	@torch.autograd.function.once_differentiable
 	def backward(ctx, grad_logsoft, grad_logcompsoft):
 		if not ctx.needs_input_grad[0]:
