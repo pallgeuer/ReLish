@@ -5,16 +5,16 @@ function [pmax, mmax] = metricmax(param, metric, logp, fig)
 
 	if nargin < 3
 		logp = false;
-	endif
+	end
 	if nargin < 4
 		fig = 88;
-	endif
+	end
 
 	if logp
 		fitparam = log(param);
 	else
 		fitparam = param;
-	endif
+	end
 	
 	pp = splinefit(fitparam, metric, 2);
 	xval = linspace(log(param(1)), log(param(end)), 1001)';
