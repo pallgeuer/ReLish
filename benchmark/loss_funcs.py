@@ -25,35 +25,37 @@ DEFAULT_TAU = 2.0
 # Generic classification loss
 class ClassificationLoss(nn.Module):
 
-	def __init__(self, num_classes, normed, norm_scale, reduction, normed_inplace=True, **kwargs):
+	def __init__(self, num_classes, normed, norm_scale, loss_scale, reduction, scaled_inplace=True, **kwargs):
 		super().__init__()
 		self.num_classes = num_classes
 		self.normed = normed
 		self.norm_scale = norm_scale if self.normed else 1
+		self.loss_scale = loss_scale
+		self.scale = self.norm_scale * self.loss_scale
 		self.reduction = reduction
-		self.normed_inplace = normed_inplace
+		self.scaled_inplace = scaled_inplace
 		self.kwargs = kwargs
 		for key, value in kwargs.items():
 			setattr(self, key, value)
 
 	def extra_repr(self):
 		extra_repr_parts = [f"classes={self.num_classes}, normed={self.normed}"]
-		if self.normed:
-			extra_repr_parts.append(f"scale={self.norm_scale:.4g}")
+		if self.normed or self.loss_scale != 1:
+			extra_repr_parts.append(f"scale={self.scale:.4g}")
 		extra_repr_parts.extend(f"{key}={value:{'.4g' if isinstance(value, float) else ''}}" for key, value in self.kwargs.items())
 		return ', '.join(extra_repr_parts)
 
 	def forward(self, logits, target):
 		loss = self.loss(logits, target)
-		if self.normed:
-			if self.normed_inplace:
-				loss.mul_(self.norm_scale)
+		if self.scale != 1:
+			if self.scaled_inplace:
+				loss.mul_(self.scale)
 			else:
-				loss = loss.mul(self.norm_scale)
+				loss = loss.mul(self.scale)
 		return loss
 
 	def loss(self, logits, target):
-		# Note: Normalisation is already handled in forward(), but take care to implement self.reduction
+		# Note: Normalisation and scaling is already handled in forward(), but take care to implement self.reduction
 		raise NotImplementedError
 
 	def reduce_loss(self, loss):
@@ -67,9 +69,9 @@ class ClassificationLoss(nn.Module):
 # Mean-squared error loss (Brier loss)
 class MSELoss(ClassificationLoss):
 
-	def __init__(self, num_classes, normed=True, reduction='mean', all_probs=False):
+	def __init__(self, num_classes, normed=True, loss_scale=1, reduction='mean', all_probs=False):
 		norm_scale = (27 / 8) * math.sqrt((num_classes - 1) / num_classes) if all_probs else (27 / 8) * math.sqrt(num_classes / (num_classes - 1))
-		super().__init__(num_classes, normed, norm_scale, reduction, all_probs=all_probs)
+		super().__init__(num_classes, normed, norm_scale, loss_scale, reduction, all_probs=all_probs)
 
 	def loss(self, logits, target):
 		target = target.unsqueeze(dim=1)
@@ -84,9 +86,9 @@ class MSELoss(ClassificationLoss):
 # Negative log likelihood loss
 class NLLLoss(ClassificationLoss):
 
-	def __init__(self, num_classes, normed=True, reduction='mean'):
+	def __init__(self, num_classes, normed=True, loss_scale=1, reduction='mean'):
 		norm_scale = math.sqrt(num_classes / (num_classes - 1))
-		super().__init__(num_classes, normed, norm_scale, reduction)
+		super().__init__(num_classes, normed, norm_scale, loss_scale, reduction)
 
 	def loss(self, logits, target):
 		return F.cross_entropy(logits, target, reduction=self.reduction)
@@ -94,9 +96,9 @@ class NLLLoss(ClassificationLoss):
 # Focal loss
 class FocalLoss(ClassificationLoss):
 
-	def __init__(self, num_classes, normed=True, reduction='mean'):
+	def __init__(self, num_classes, normed=True, loss_scale=1, reduction='mean'):
 		norm_scale = math.sqrt(num_classes / (num_classes - 1)) * (num_classes ** 2) / ((num_classes - 1) * (num_classes - 1 + 2 * math.log(num_classes)))
-		super().__init__(num_classes, normed, norm_scale, reduction)
+		super().__init__(num_classes, normed, norm_scale, loss_scale, reduction)
 
 	def loss(self, logits, target):
 		probs = F.softmax(logits, dim=1)
@@ -107,9 +109,9 @@ class FocalLoss(ClassificationLoss):
 # Note: Has identical grads to SNLL
 class KLDivLoss(ClassificationLoss):
 
-	def __init__(self, num_classes, normed=True, reduction='mean', eps=DEFAULT_EPS):
+	def __init__(self, num_classes, normed=True, loss_scale=1, reduction='mean', eps=DEFAULT_EPS):
 		norm_scale = math.sqrt((num_classes - 1) / num_classes) / (1 - eps - 1 / num_classes)
-		super().__init__(num_classes, normed, norm_scale, reduction, eps=eps)
+		super().__init__(num_classes, normed, norm_scale, loss_scale, reduction, eps=eps)
 		self.target_prob_true = math.log(1 - self.eps)
 		self.target_prob_false = math.log(self.eps / (self.num_classes - 1))
 
@@ -126,9 +128,9 @@ class KLDivLoss(ClassificationLoss):
 # Label-smoothed negative log likelihood loss
 class SNLLLoss(ClassificationLoss):
 
-	def __init__(self, num_classes, normed=True, reduction='mean', eps=DEFAULT_EPS):
+	def __init__(self, num_classes, normed=True, loss_scale=1, reduction='mean', eps=DEFAULT_EPS):
 		norm_scale = math.sqrt((num_classes - 1) / num_classes) / (1 - eps - 1 / num_classes)
-		super().__init__(num_classes, normed, norm_scale, reduction, eps=eps)
+		super().__init__(num_classes, normed, norm_scale, loss_scale, reduction, eps=eps)
 		self.label_smoothing = eps * (num_classes / (num_classes - 1))
 
 	def loss(self, logits, target):
@@ -137,9 +139,9 @@ class SNLLLoss(ClassificationLoss):
 # Dual negative log likelihood loss
 class DNLLLoss(ClassificationLoss):
 
-	def __init__(self, num_classes, normed=True, reduction='mean', eps=DEFAULT_EPS, cap=True):
+	def __init__(self, num_classes, normed=True, loss_scale=1, reduction='mean', eps=DEFAULT_EPS, cap=True):
 		norm_scale = math.sqrt((num_classes - 1) / num_classes) / (1 - eps - 1 / num_classes)
-		super().__init__(num_classes, normed, norm_scale, reduction, eps=eps, cap=cap)
+		super().__init__(num_classes, normed, norm_scale, loss_scale, reduction, eps=eps, cap=cap)
 		self.max_log_prob = math.log(1 - eps)
 		self.min_log_prob_comp = math.log(eps)
 
@@ -154,10 +156,10 @@ class DNLLLoss(ClassificationLoss):
 # Relative dual negative log likelihood loss (Inf-norm)
 class RDNLLILoss(ClassificationLoss):
 
-	def __init__(self, num_classes, normed=True, reduction='mean', eps=DEFAULT_EPS, cap=True):
+	def __init__(self, num_classes, normed=True, loss_scale=1, reduction='mean', eps=DEFAULT_EPS, cap=True):
 		mu = 1 - eps - eps / (num_classes - 1)
 		norm_scale = math.sqrt((num_classes - 1) / num_classes) / mu
-		super().__init__(num_classes, normed, norm_scale, reduction, eps=eps, mu=mu, cap=cap)
+		super().__init__(num_classes, normed, norm_scale, loss_scale, reduction, eps=eps, mu=mu, cap=cap)
 
 	def loss(self, logits, target):
 		target = target.unsqueeze(dim=1)
@@ -174,10 +176,10 @@ class RDNLLILoss(ClassificationLoss):
 # Note: If cap is also True, then some uncapped return gradients actually occur due to the gradient leak via the coefficients.
 class RDNLL2Loss(ClassificationLoss):
 
-	def __init__(self, num_classes, normed=True, reduction='mean', eps=DEFAULT_EPS, cap=True, detach=True):
+	def __init__(self, num_classes, normed=True, loss_scale=1, reduction='mean', eps=DEFAULT_EPS, cap=True, detach=True):
 		mu = 1 - eps - eps / math.sqrt(num_classes - 1)
 		norm_scale = math.sqrt((num_classes - 1) / num_classes) / ((1 - eps - 1 / num_classes) * (1 + 1 / math.sqrt(num_classes - 1)))
-		super().__init__(num_classes, normed, norm_scale, reduction, eps=eps, mu=mu, cap=cap, detach=detach)
+		super().__init__(num_classes, normed, norm_scale, loss_scale, reduction, eps=eps, mu=mu, cap=cap, detach=detach)
 
 	def loss(self, logits, target):
 		target = target.unsqueeze(dim=1)
@@ -196,9 +198,9 @@ class RDNLL2Loss(ClassificationLoss):
 # Note: If cap is also True, then some uncapped return gradients actually occur due to the gradient leak via the coefficients.
 class MDNLLLoss(ClassificationLoss):
 
-	def __init__(self, num_classes, normed=True, reduction='mean', eps=DEFAULT_EPS, cap=True, detach=True):
+	def __init__(self, num_classes, normed=True, loss_scale=1, reduction='mean', eps=DEFAULT_EPS, cap=True, detach=True):
 		norm_scale = 0.5 * math.sqrt((num_classes - 1) / num_classes) / (1 - eps - 1 / num_classes)
-		super().__init__(num_classes, normed, norm_scale, reduction, eps=eps, cap=cap, detach=detach)
+		super().__init__(num_classes, normed, norm_scale, loss_scale, reduction, eps=eps, cap=cap, detach=detach)
 		self.target_const = 2 * (1 - self.eps)
 
 	def loss(self, logits, target):
@@ -213,9 +215,9 @@ class MDNLLLoss(ClassificationLoss):
 # Relative raw logit loss
 class RRLLoss(ClassificationLoss):
 
-	def __init__(self, num_classes, normed=True, reduction='mean', eta=DEFAULT_ETA):
+	def __init__(self, num_classes, normed=True, loss_scale=1, reduction='mean', eta=DEFAULT_ETA):
 		norm_scale = math.sqrt(num_classes / (num_classes - 1)) / (2 * eta)
-		super().__init__(num_classes, normed, norm_scale, reduction, eta=eta)
+		super().__init__(num_classes, normed, norm_scale, loss_scale, reduction, eta=eta)
 
 	def loss(self, logits, target):
 		target = target.unsqueeze(dim=1)
@@ -225,9 +227,9 @@ class RRLLoss(ClassificationLoss):
 # Manual relative raw logit loss
 class MRRLLoss(ClassificationLoss):
 
-	def __init__(self, num_classes, normed=True, reduction='mean', eta=DEFAULT_ETA, cap=True):
+	def __init__(self, num_classes, normed=True, loss_scale=1, reduction='mean', eta=DEFAULT_ETA, cap=True):
 		norm_scale = math.sqrt(num_classes / (num_classes - 1)) / (2 * eta)
-		super().__init__(num_classes, normed, norm_scale, reduction, eta=eta, cap=cap)
+		super().__init__(num_classes, normed, norm_scale, loss_scale, reduction, eta=eta, cap=cap)
 
 	def loss(self, logits, target):
 		return self.reduce_loss(MRRLFunction.apply(logits, target, self.eta, self.cap))
@@ -235,10 +237,10 @@ class MRRLLoss(ClassificationLoss):
 # Saturated relative raw logit loss
 class SRRLLoss(ClassificationLoss):
 
-	def __init__(self, num_classes, normed=True, reduction='mean', eta=DEFAULT_ETA, tau=DEFAULT_TAU):
+	def __init__(self, num_classes, normed=True, loss_scale=1, reduction='mean', eta=DEFAULT_ETA, tau=DEFAULT_TAU):
 		delta = tau * eta * eta * ((num_classes - 1) / num_classes)
 		norm_scale = math.sqrt(tau)
-		super().__init__(num_classes, normed, norm_scale, reduction, eta=eta, tau=tau, delta=delta)
+		super().__init__(num_classes, normed, norm_scale, loss_scale, reduction, eta=eta, tau=tau, delta=delta)
 		self.loss_offset = math.sqrt(delta)
 
 	def loss(self, logits, target):
@@ -250,10 +252,10 @@ class SRRLLoss(ClassificationLoss):
 # Manual saturated relative raw logit loss
 class MSRRLLoss(ClassificationLoss):
 
-	def __init__(self, num_classes, normed=True, reduction='mean', eta=DEFAULT_ETA, tau=DEFAULT_TAU, cap=True):
+	def __init__(self, num_classes, normed=True, loss_scale=1, reduction='mean', eta=DEFAULT_ETA, tau=DEFAULT_TAU, cap=True):
 		delta = tau * eta * eta * ((num_classes - 1) / num_classes)
 		norm_scale = math.sqrt(tau)
-		super().__init__(num_classes, normed, norm_scale, reduction, eta=eta, tau=tau, delta=delta, cap=cap)
+		super().__init__(num_classes, normed, norm_scale, loss_scale, reduction, eta=eta, tau=tau, delta=delta, cap=cap)
 		self.loss_offset = math.sqrt(delta)
 
 	def loss(self, logits, target):
@@ -262,10 +264,10 @@ class MSRRLLoss(ClassificationLoss):
 # Manual exponentially saturated relative raw logit loss
 class MESRRLLoss(ClassificationLoss):
 
-	def __init__(self, num_classes, normed=True, reduction='mean', eta=DEFAULT_ETA, tau=DEFAULT_TAU, cap=True):
+	def __init__(self, num_classes, normed=True, loss_scale=1, reduction='mean', eta=DEFAULT_ETA, tau=DEFAULT_TAU, cap=True):
 		delta = tau * eta * eta * ((num_classes - 1) / num_classes)
 		norm_scale = math.sqrt(tau)
-		super().__init__(num_classes, normed, norm_scale, reduction, eta=eta, tau=tau, delta=delta, cap=cap)
+		super().__init__(num_classes, normed, norm_scale, loss_scale, reduction, eta=eta, tau=tau, delta=delta, cap=cap)
 		self.loss_const_a = 0.5 * math.sqrt(3 * delta)
 		self.loss_const_b = 1 / (delta * math.sqrt(3))
 
@@ -314,19 +316,19 @@ def resolve_loss_factory(loss_spec: str) -> tuple[Optional[str], Optional[Callab
 	return loss_name, loss_factory, loss_normed, loss_param
 
 # Instantiate a loss module from a loss factory and parameters
-def create_loss_module(loss_factory: Callable, num_classes, normed=True, reduction='mean', eps=None, eta=None, **kwargs) -> ClassificationLoss:
-	params = dict(num_classes=num_classes, normed=normed, reduction=reduction, eps=eps if eps is not None else DEFAULT_EPS, eta=eta if eta is not None else DEFAULT_ETA, **kwargs)
+def create_loss_module(loss_factory: Callable, num_classes, normed=True, loss_scale=1, reduction='mean', eps=None, eta=None, **kwargs) -> ClassificationLoss:
+	params = dict(num_classes=num_classes, normed=normed, loss_scale=loss_scale, reduction=reduction, eps=eps if eps is not None else DEFAULT_EPS, eta=eta if eta is not None else DEFAULT_ETA, **kwargs)
 	factory_param_keys = inspect.signature(loss_factory).parameters.keys()
 	params = {key: value for key, value in params.items() if key in factory_param_keys}
 	loss_module = loss_factory(**params)
 	return loss_module
 
 # Resolve a loss name and module from a loss specification
-def resolve_loss_module(loss_spec: str, num_classes, reduction='mean', **kwargs) -> tuple[Optional[str], Optional[ClassificationLoss]]:
+def resolve_loss_module(loss_spec: str, num_classes, loss_scale=1, reduction='mean', **kwargs) -> tuple[Optional[str], Optional[ClassificationLoss]]:
 	loss_name, loss_factory, loss_normed, loss_param = resolve_loss_factory(loss_spec)
 	if not loss_factory:
 		return None, None
-	return loss_name, create_loss_module(loss_factory, num_classes, normed=loss_normed, reduction=reduction, eps=loss_param, eta=loss_param, **kwargs)
+	return loss_name, create_loss_module(loss_factory, num_classes, normed=loss_normed, loss_scale=loss_scale, reduction=reduction, eps=loss_param, eta=loss_param, **kwargs)
 
 #
 # Helper modules

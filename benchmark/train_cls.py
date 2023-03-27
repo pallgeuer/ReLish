@@ -46,6 +46,7 @@ def main():
 	parser.add_argument('--scheduler', type=str, default='multisteplr', metavar='NAME', help='Learning rate scheduler (default: %(default)s)')
 	parser.add_argument('--lr_scale', type=float, default=1.0, metavar='SCALE', help='Learning rate scale relative to the default value')
 	parser.add_argument('--loss', type=str, default='nllloss', metavar='NAME', help='Loss function (default: %(default)s)')
+	parser.add_argument('--loss_scale', type=float, default=1.0, metavar='SCALE', help='Loss scale relative to default value')
 	parser.add_argument('--epochs', type=int, default=80, metavar='NUM', help='Number of epochs to train (default: %(default)s)')
 	parser.add_argument('--warmup_epochs', type=int, default=0, metavar='NUM', help='Number of linear learning rate warmup epochs (default: %(default)s)')
 	parser.add_argument('--batch_size', type=int, default=64, metavar='SIZE', help='Training batch size (default: %(default)s)')
@@ -434,12 +435,17 @@ def load_model(C, num_classes, in_shape, device, details=False):
 # Load the criterion
 def load_criterion(C, num_classes, device, details=False):
 
+	loss_scale_supported = False
 	if C.loss == 'nllloss':
 		criterion = nn.CrossEntropyLoss(reduction='mean')
 	else:
-		_, criterion = loss_funcs.resolve_loss_module(C.loss, num_classes, reduction='mean')
+		loss_scale_supported = True
+		_, criterion = loss_funcs.resolve_loss_module(C.loss, num_classes, loss_scale=C.loss_scale, reduction='mean')
+
 	if not criterion:
 		raise ValueError(f"Invalid criterion/loss specification: {C.loss}")
+	elif not loss_scale_supported and C.loss_scale != 1:
+		raise ValueError(f"Loss {C.loss} does not support custom scaling of {C.loss_scale}")
 
 	criterion.to(device=device)
 
