@@ -2,6 +2,7 @@
 
 # Imports
 import gc
+import sys
 import math
 import time
 import random
@@ -15,6 +16,7 @@ import numpy as np
 import wandb
 import torch
 import torch.nn.functional as F
+import torch.backends.cudnn
 
 #
 # Wandb util
@@ -53,6 +55,27 @@ def print_wandb_config(C=None, newline=True):
 #
 # Training util
 #
+
+# Set whether execution should be deterministic (as much as possible)
+def set_determinism(deterministic, seed=1, cudnn_benchmark_mode=False):
+	# See: https://pytorch.org/docs/stable/notes/randomness.html
+	# Env vars: PYTHONHASHSEED=1 CUBLAS_WORKSPACE_CONFIG=:4096:8
+	# Also need: Zero dataset workers, no AMP
+	# If still slightly non-deterministic, try CPU as fallback
+	if deterministic:
+		random.seed(seed)
+		np.random.seed(seed)
+		torch.manual_seed(seed)
+		torch.backends.cudnn.deterministic = True
+		torch.backends.cudnn.benchmark = False
+		torch.use_deterministic_algorithms(True, warn_only=True)
+	else:
+		random.seed()
+		np.random.seed()  # noqa
+		torch.seed()
+		torch.backends.cudnn.deterministic = False
+		torch.backends.cudnn.benchmark = cudnn_benchmark_mode
+		torch.use_deterministic_algorithms(False, warn_only=True)
 
 # Gradient accumulator
 # Note: While this accumulates GRADIENTS across multiple batches 'perfectly', it does NOT accumulate the statistics inside e.g. batch norms or similar, if these are present in the model.
@@ -345,6 +368,12 @@ def wait_if_paused(pause_files, device):
 #
 # Misc util
 #
+
+# Determine whether there is a debugger attached (more precisely, any debugger, profiler, code coverage tool, etc that implements sys.gettrace())
+# Examples of False: Run in PyCharm, run script from console, run normal code in Jupyter notebook
+# Examples of True: Debug in PyCharm, interactive Python console, explicitly debug code in Jupyter notebook
+def debugger_attached():
+	return sys.gettrace() is not None
 
 # Format a duration as hours minutes seconds (hours can be arbitrarily large)
 def format_duration(duration):

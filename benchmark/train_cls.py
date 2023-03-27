@@ -53,6 +53,7 @@ def main():
 	parser.add_argument('--max_batch_size', type=int, default=0, metavar='SIZE', help='Maximum batch size to pass into the model at once (0 = No limit)')
 	parser.add_argument('--no_batch_drop', action='store_true', help='Do not drop the last incomplete batch during training (batches are never dropped during validation)')
 	parser.add_argument('--device', type=str, default='cuda', metavar='DEVICE', help='PyTorch device to run on (default: %(default)s)')
+	parser.add_argument('--determ', type=int, default=0, metavar='SEED', help='Deterministic seed for random number generation (0 = Non-deterministic)')
 	parser.add_argument('--no_cudnn_bench', action='store_true', help='Disable cuDNN benchmark mode to save memory over speed')
 	parser.add_argument('--amp', action='store_true', help='Enable automatic mixed precision training')
 	parser.add_argument('--aaa', type=int, default=1, metavar='NUM', help='Dummy variable that allows sweeps to do multiple passes of grid searches')
@@ -95,7 +96,6 @@ def main():
 		C = wandb.config
 		util.print_wandb_config(C)
 		device = torch.device(C.device)
-		torch.backends.cudnn.benchmark = not C.no_cudnn_bench
 
 		pause_dir = wandb.run.dir or '/tmp'
 		pause_files = []
@@ -109,6 +109,12 @@ def main():
 			for pause_file in pause_files:
 				print(f"  {pause_file}")
 			util.wait_if_paused(pause_files, device)
+			print()
+
+		deterministic = C.determ != 0
+		util.set_determinism(deterministic=deterministic, seed=C.determ, cudnn_benchmark_mode=not C.no_cudnn_bench)
+		if deterministic:
+			print(f"Deterministic mode is active with seed {C.determ}")
 			print()
 
 		train_loader, valid_loader, tfrm_unnormalize, num_classes, in_shape, accum_size = load_dataset(C, device, details=args.dataset_details)
@@ -256,7 +262,14 @@ def load_dataset(C, device, details=False):
 		model_batch_size = C.batch_size
 		accum_size = 1
 
-	dataset_workers = min(C.dataset_workers, model_batch_size)
+	dataset_workers = C.dataset_workers
+	if dataset_workers > model_batch_size:
+		dataset_workers = model_batch_size
+	elif C.determ != 0 or util.debugger_attached():
+		print("Not using any dataset workers due to determinism or debugger")
+		print()
+		dataset_workers = 0
+
 	pin_memory = (device.type == 'cuda')
 	train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=model_batch_size, num_workers=dataset_workers, shuffle=True, pin_memory=pin_memory, drop_last=not C.no_batch_drop)
 	valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=model_batch_size, num_workers=dataset_workers, shuffle=False, pin_memory=pin_memory, drop_last=False)
@@ -480,8 +493,13 @@ def load_scheduler(C, optimizer):
 # Train the model
 def train_model(C, device, train_loader, valid_loader, tfrm_unnormalize, model, criterion, optimizer, scheduler, accum_size, pause_files):
 
+	amp_enabled = C.amp
+	if amp_enabled and (device.type != 'cuda' or C.determ != 0):
+		print("Disabling AMP as device is not CUDA or determinism is activated")
+		print()
+		amp_enabled = False
+
 	cpu_device = torch.device('cpu')
-	amp_enabled = C.amp and device.type == 'cuda'
 	scaler = torch.cuda.amp.GradScaler(enabled=amp_enabled)
 	grad_accum = util.GradAccum(train_loader, accum_size=accum_size)
 	warmup_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1 / (C.warmup_epochs + 1), end_factor=1, total_iters=C.warmup_epochs) if C.warmup_epochs >= 1 else None
