@@ -15,7 +15,7 @@ import torch.nn.functional as F
 
 # Constants
 DEFAULT_EPS = 0.1
-DEFAULT_ETA = 2.0
+DEFAULT_ETA = 6.0
 DEFAULT_TAU = 2.0
 
 #
