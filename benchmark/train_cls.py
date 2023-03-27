@@ -126,7 +126,7 @@ def main():
 		if args.dry:
 			print("Dry run => Would have trained model...")
 		else:
-			train_model(C, device, train_loader, valid_loader, tfrm_unnormalize, model, criterion, optimizer, scheduler, accum_size, pause_files)
+			train_model(C, device, train_loader, valid_loader, tfrm_unnormalize, num_classes, model, criterion, optimizer, scheduler, accum_size, pause_files)
 
 	print()
 
@@ -491,7 +491,7 @@ def load_scheduler(C, optimizer):
 		raise ValueError(f"Invalid learning rate scheduler specification: {C.scheduler}")
 
 # Train the model
-def train_model(C, device, train_loader, valid_loader, tfrm_unnormalize, model, criterion, optimizer, scheduler, accum_size, pause_files):
+def train_model(C, device, train_loader, valid_loader, tfrm_unnormalize, num_classes, model, criterion, optimizer, scheduler, accum_size, pause_files):
 
 	amp_enabled = C.amp
 	if amp_enabled and (device.type != 'cuda' or C.determ != 0):
@@ -505,6 +505,7 @@ def train_model(C, device, train_loader, valid_loader, tfrm_unnormalize, model, 
 	warmup_scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor=1 / (C.warmup_epochs + 1), end_factor=1, total_iters=C.warmup_epochs) if C.warmup_epochs >= 1 else None
 	model_saver = util.ModelCheckpointSaver(num_best=C.model_saves, maximise=True, save_last=False, upload=C.model_upload)
 	nan_monitor = util.NaNMonitor(max_batches=C.max_nan_batches, max_epochs=C.max_nan_epochs)
+	bad_metric_monitor = util.BadMetricMonitor(max_epochs=min(max(round(C.epochs / 10), 5), 20), metric_min=1.25 / num_classes)
 	train_sample_logger = util.SampleLogger(num_samples=grad_accum.num_samples_used, key_prefix='train_', sample_size=C.log_samples, data_tfrm=tfrm_unnormalize, classes=getattr(train_loader.dataset, 'classes', None))
 	valid_sample_logger = util.SampleLogger(num_samples=len(valid_loader.dataset), key_prefix='valid_', sample_size=C.log_samples, data_tfrm=tfrm_unnormalize, classes=getattr(valid_loader.dataset, 'classes', None))
 	train_logit_stats = util.LogitDistStats(num_samples=grad_accum.num_samples_used, key_prefix='train_', enabled=C.logit_stats)
@@ -648,6 +649,8 @@ def train_model(C, device, train_loader, valid_loader, tfrm_unnormalize, model, 
 		if nan_monitor.update_epoch(train_stats.loss, valid_stats.loss):
 			print(f"Aborting training run due to excessive NaNs ({nan_monitor.epoch_worm_count()} worm epochs, {nan_monitor.batch_worm_count()} worm batches)")
 			raise RuntimeError(f"Too many output NaNs encountered during training ({nan_monitor.epoch_worm_count()} worm epochs, {nan_monitor.batch_worm_count()} worm batches)")
+		elif bad_metric_monitor.update(valid_top1):
+			raise RuntimeError(f"Too many bad epochs ({bad_metric_monitor.worm_count()} worm epochs with valid top-1 < {bad_metric_monitor.metric_min}) encountered during training")
 
 # Run main function
 if __name__ == "__main__":

@@ -236,6 +236,24 @@ class NaNMonitor:
 	def epoch_worm_count(self):
 		return self.epoch_nan_worm.count
 
+# Bad metric monitor
+class BadMetricMonitor:
+
+	def __init__(self, max_epochs, metric_min=-math.inf, metric_max=math.inf):
+		self.metric_bad_worm = EventWorm(event_count=max_epochs)
+		self.metric_min = metric_min
+		self.metric_max = metric_max
+
+	def update(self, metric):
+		self.metric_bad_worm.update(not self.metric_min <= metric <= self.metric_max)
+		return self.metric_bad()
+
+	def metric_bad(self):
+		return self.metric_bad_worm.had_event()
+
+	def worm_count(self):
+		return self.metric_bad_worm.count
+
 # Sample logger
 class SampleLogger:
 
