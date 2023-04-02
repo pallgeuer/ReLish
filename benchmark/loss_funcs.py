@@ -268,7 +268,7 @@ class MESRRLLoss(ClassificationLoss):
 		delta = tau * eta * eta * ((num_classes - 1) / num_classes)
 		norm_scale = math.sqrt(tau)
 		super().__init__(num_classes, normed, norm_scale, loss_scale, reduction, eta=eta, tau=tau, delta=delta, cap=cap)
-		self.loss_const_a = 0.5 * math.sqrt(3 * delta)
+		self.loss_const_a = math.sqrt(3 * delta)
 		self.loss_const_b = 1 / (delta * math.sqrt(3))
 
 	def loss(self, logits, target):
@@ -445,9 +445,14 @@ class MESRRLFunction(torch.autograd.Function):
 			logit_terms.clamp_(min=-eta)
 		grad = logit_terms.sub_(logit_terms.mean(dim=1, keepdim=True))
 		J = grad.square().sum(dim=1, keepdim=True)
-		grad.mul_(J.div(delta).tanh_().div(J).nan_to_num_(nan=1 / delta).sqrt_())
+		J_delta = J.div(delta)
+		grad.mul_(torch.where(
+			J_delta < (0.23 if J.dtype == torch.float16 or J.dtype == torch.bfloat16 else 0.023),
+			(1 / delta) - J_delta.mul(1 / const_a).square_(),
+			J_delta.tanh().div_(J),
+		).sqrt_())
 		ctx.save_for_backward(grad)
-		return J.mul_(const_b).asinh_().mul_(const_a)
+		return J.mul_(const_b).asinh_().mul_(0.5 * const_a)
 
 	@staticmethod
 	@torch.autograd.function.once_differentiable
