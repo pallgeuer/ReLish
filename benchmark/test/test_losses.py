@@ -13,8 +13,8 @@ import torch.nn.functional as F
 import loss_funcs  # noqa
 
 # Constants
-DEFAULT_EPS = 0.2
-DEFAULT_ETA = 2.0
+DEFAULT_EPS = 0.1
+DEFAULT_ETA = 6.0
 FIGSIZE = (9.60, 4.55)
 FIGDPI = 100
 
