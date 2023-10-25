@@ -263,12 +263,12 @@ def load_dataset(C, device, details=False):
 		accum_size = 1
 
 	dataset_workers = C.dataset_workers
-	if dataset_workers > model_batch_size:
-		dataset_workers = model_batch_size
-	elif C.determ != 0 or util.debugger_attached():
+	if C.determ != 0 or util.debugger_attached():
 		print("Not using any dataset workers due to determinism or debugger")
 		print()
 		dataset_workers = 0
+	elif dataset_workers > model_batch_size:
+		dataset_workers = model_batch_size
 
 	pin_memory = (device.type == 'cuda')
 	train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=model_batch_size, num_workers=dataset_workers, shuffle=True, pin_memory=pin_memory, drop_last=not C.no_batch_drop)
